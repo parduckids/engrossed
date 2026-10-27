@@ -169,6 +169,21 @@ struct SettingsForm: View {
                     }
                 }
 
+                // Points at our own page rather than the Chrome Web Store
+                // listing, so the store address can change, or not exist
+                // yet, without the app ever linking somewhere dead.
+                group("Also for Chrome") {
+                    #if os(iOS)
+                    caption("On your computer, Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved.")
+                    #else
+                    caption("Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved.")
+                    #endif
+                    Link("See Engrossed for Chrome",
+                         destination: URL(string: "https://parduckids.github.io/engrossed/chrome.html")!)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(theme.accent)
+                }
+
                 group("Storage") {
                     Button("Clear parsed-text cache") {
                         library.clearCaches()

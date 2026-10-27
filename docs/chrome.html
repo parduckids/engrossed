@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engrossed for Chrome</title>
+  <meta name="description" content="Read long articles without losing focus: a few sentences at a time, with your place saved.">
+  <style>
+    :root { --paper: #faf9f6; --ink: #212124; --faint: #212124a6; --accent: #b8576b; --accent-fill: #a84a5e; --on-accent: #fff; --tile: #2121240a; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #121214; --ink: #dedbd6; --faint: #dedbd6a6; --accent: #de9985; --accent-fill: #de9985; --on-accent: #1a1a1c; --tile: #dedbd60f; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 64px 20px 80px;
+      background: var(--paper); color: var(--ink);
+      font: 17px/1.6 ui-serif, Georgia, "Iowan Old Style", serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 44rem; margin: 0 auto; }
+    h1 { font-size: 40px; line-height: 1.1; margin: 0 0 10px; }
+    .lede { font-size: 21px; margin: 0 0 28px; }
+    .shot { width: 100%; height: auto; border-radius: 12px; display: block;
+            box-shadow: 0 1px 2px #0000000f, 0 12px 40px #0000001f; margin: 8px 0 32px; }
+    ul { padding-left: 1.2em; margin: 0 0 32px; }
+    li { margin-bottom: 8px; }
+    .cta { display: inline-block; font-family: ui-rounded, system-ui, sans-serif; font-size: 16px; font-weight: 500;
+           text-decoration: none; color: var(--on-accent); background: var(--accent-fill);
+           padding: 12px 20px; border-radius: 12px; }
+    .soon { font-family: ui-rounded, system-ui, sans-serif; font-size: 15px; color: var(--faint);
+            background: var(--tile); padding: 14px 16px; border-radius: 12px; }
+    .small { font-family: ui-rounded, system-ui, sans-serif; font-size: 13px; color: var(--faint); margin-top: 40px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Engrossed for Chrome</h1>
+  <p class="lede">Read long articles without losing focus.</p>
+
+  <img class="shot" src="img/chrome-cards.png" width="1280" height="800"
+       alt="An article shown a few sentences at a time, with the end of the previous sentences faded above">
+
+  <p>Click the Engrossed button on any article and it shows a few sentences at a time, with nothing
+  else on the screen. Click, or press Space, and the next few appear. It never cuts a sentence in
+  half, and it remembers your place in every article.</p>
+
+  <ul>
+    <li>A few sentences at a time, or the whole article with everything but your place dimmed.</li>
+    <li>Every few minutes, a moment to say in one line what you just read.</li>
+    <li>An optional reading timer, a list of sections to jump to, and read aloud.</li>
+    <li>Light and dark themes, and your choice of font and text size.</li>
+    <li>No account, no servers, no tracking. It only runs when you click it.</li>
+  </ul>
+
+  <!-- When the Chrome Web Store listing is approved, replace the "soon" paragraph
+       with: <a class="cta" href="STORE URL">Add to Chrome</a>
+       The apps link to this page, not to the store, so nothing else needs to change. -->
+  <p class="soon">Coming soon to the Chrome Web Store. It's being reviewed by Google now.</p>
+
+  <img class="shot" src="img/chrome-night.png" width="1280" height="800"
+       alt="The same reading view in the dark theme">
+
+  <p class="small">
+    An Engrossed app for iPhone, iPad and Mac, for books and PDFs, is on its way.
+    <a href="privacy/chrome.html">Privacy</a> ·
+    <a href="mailto:parduckids@gmail.com">Contact</a> ·
+    <a href="./">Engrossed</a>
+  </p>
+</main>
+</body>
+</html>
