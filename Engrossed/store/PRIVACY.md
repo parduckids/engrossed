@@ -66,10 +66,7 @@ any change would most likely be to say so more clearly.
 
 ## Contact
 
-Questions about privacy: **[FILL THIS IN BEFORE HOSTING]**
+Questions about privacy: parduckids@gmail.com
 
-> Two things to replace before this goes live: the address above, and the date at the top, which
-> should be the day you submit. A privacy policy with an unfilled placeholder is a 5.1.1 finding
-> if a reviewer opens the URL, and it is exactly the sort of thing that ships unnoticed because
-> the rest of the document reads fine. A dedicated alias is worth it so a legal document does not
-> point at your personal inbox for ever.
+> This is the source text. The hosted copy is `docs/privacy/app.html`, live at
+> https://parduckids.github.io/engrossed/privacy/app.html. Change both together.

@@ -17,10 +17,11 @@ Engrossed
 ## Subtitle (30 max)
 
 ```
-Books, one card at a time
+Read without losing focus
 ```
 
-Alternatives, all within 30: `One card at a time` · `PDFs without the wall of text` · `A calmer way to read PDFs`
+Same line as the Chrome extension, so the two read as one product. Alternatives, all within 30:
+`A few sentences at a time` · `PDFs without the wall of text` · `A calmer way to read PDFs`
 
 ## Promotional text (170 max, editable any time without review)
 
@@ -31,10 +32,10 @@ A page of text gives your eyes a hundred places to land. Engrossed gives them on
 ## Keywords (100 max, comma separated, no spaces after commas)
 
 ```
-pdf,epub,reader,focus,adhd,attention,reading,study,textbook,dyslexia,neurodivergent,calm,ebook
+pdf,epub,reader,adhd,autism,attention,reading,study,textbook,dyslexia,neurodivergent,calm,ebook
 ```
 
-That is 93 characters. Do not repeat words already in the name or subtitle, Apple indexes those
+That is 95 characters. "focus" is left out because the subtitle already has it. Do not repeat words already in the name or subtitle, Apple indexes those
 separately. Do not put competitor names in here, Apple rejects for it.
 
 ## Description (4000 max)
@@ -42,9 +43,9 @@ separately. Do not put competitor names in here, Apple rejects for it.
 ```
 A page full of text gives your eyes a hundred places to land. Engrossed gives them one.
 
-Open a PDF or an EPUB and it is cut into cards: two or three whole sentences, alone on the screen, with
-nothing else competing for your attention. Close the app in the middle of a sentence and it
-reopens on that exact card.
+Open a PDF or an EPUB and it shows you two or three whole sentences at a time, alone on the
+screen, with nothing else competing for your attention. Close the app in the middle of a sentence
+and it reopens at that exact spot.
 
 Built for people who lose the thread on a full page. If you have ever read the same paragraph
 four times, or opened a 200 page document and closed it again immediately, this is for you.
@@ -52,13 +53,13 @@ four times, or opened a 200 page document and closed it again immediately, this 
 
 WHAT IT DOES
 
-Cards. Text is cut at sentence boundaries, never mid-thought. A card you can finish is a
-completely different thing from a page you cannot.
+A few sentences at a time. Text is cut at sentence boundaries, never mid-thought. A few lines
+you can finish are a completely different thing from a page you cannot.
 
-Keeps your place, exactly. Close it anywhere. It reopens on that card and steps back one, so you
+Keeps your place, exactly. Close it anywhere. It reopens there and steps back a little, so you
 land inside the thought instead of at a cold edge.
 
-Three ways to read. Cards, one at a time. Flow, continuous text with everything but your current
+Three ways to read. Cards, a few sentences at a time. Flow, continuous text with everything but your current
 spot dimmed. Pace, a word at a time at a speed you set.
 
 Checkpoints. At the end of each stretch it asks what you just read. If nothing comes to mind,
@@ -75,7 +76,8 @@ sharp when you zoom in, so the small print in a figure is actually readable.
 Typography that follows accessibility guidance: line length, line spacing, four themes, four
 typefaces, and text size you control.
 
-Read aloud, if a second channel helps you hold on.
+Read aloud, if a second channel helps you hold on. It uses your device's own voices, or
+ElevenLabs voices if you have an ElevenLabs account and paste in your own key.
 
 
 HONEST ABOUT WHAT WORKS
@@ -92,9 +94,10 @@ plainly that controlled tests found no benefit.
 
 PRIVACY
 
-No account. No sign up. No servers of our own. No analytics. No adverts. The only thing the app
-talks to is Apple's App Store, and only for the one-time purchase. Your books and your places
-never leave your device.
+No account. No sign up. No servers of our own. No analytics. No adverts. Your books and your
+places never leave your device. The app talks to Apple's App Store for the one-time purchase,
+and to ElevenLabs only if you choose to add your own ElevenLabs key, and then only the few
+sentences being read aloud.
 
 
 PRICE
@@ -137,19 +140,32 @@ First release.
 ### Privacy nutrition label
 
 Answer **"No, we do not collect data from this app."** to the first question, which ends the
-questionnaire. This is true: the app collects nothing and has no servers of its own. Its only
-network use is StoreKit, for the one-time purchase, and data Apple collects through StoreKit is
-Apple's to declare, not yours. Do not let a third-party SDK creep in later without revisiting
-this, it is a legal declaration.
+questionnaire. This is true: the app collects nothing and has no servers of its own.
 
-A privacy policy URL is required even when you collect nothing. `store/PRIVACY.md` is the text.
-Host it anywhere public (a GitHub Pages page or a Gist is fine) and paste the URL in.
+- StoreKit, for the one-time purchase: data Apple collects through StoreKit is Apple's to
+  declare, not yours.
+- ElevenLabs: Apple counts data as collected when it reaches you or a partner whose code you put
+  in the app. ElevenLabs is neither. There is no ElevenLabs SDK in the app, it is off unless the
+  reader pastes in their own key, and the text goes to the reader's own ElevenLabs account under
+  their own agreement with ElevenLabs. You never receive it. The privacy policy says all this.
+
+If you would rather over-declare than argue it, the honest alternative is: User Content, Other
+User Content, not linked to the user, not used for tracking, purpose App Functionality. Either
+way, do not let a third-party SDK creep in later without revisiting this. It is a legal
+declaration, and `Engrossed/PrivacyInfo.xcprivacy` says the same thing inside the app.
+
+| URL field | Value |
+| --- | --- |
+| Privacy Policy URL | `https://parduckids.github.io/engrossed/privacy/app.html` |
+| Support URL | `https://parduckids.github.io/engrossed/` |
+| Marketing URL (optional) | leave empty, or the support URL |
 
 ### Notes for App Review
 
 ```
 Engrossed reads PDF and EPUB files that the user imports from their own device. It requires no
-account. The only network activity is StoreKit, for the one-time purchase.
+account. Network activity is StoreKit, for the one-time purchase, and one optional feature
+described at the end.
 
 On first launch the app installs a short bundled guide and opens it, so the reader is visible
 immediately with no setup. Tap, or press space, to advance a card.
@@ -164,13 +180,23 @@ In-App Purchase: one book at a time is free with no limit on time, pages or feat
 purchase ("Full shelf", non-consumable, family shareable) removes the one-book-at-a-time limit.
 Deleting a book and importing a different one is always free and unlimited. The bundled guide
 does not count towards the limit.
+
+Optional ElevenLabs voices: Settings > Read aloud has a field where a user can paste their own
+ElevenLabs API key to use two ElevenLabs voices instead of the built-in system voices. It is off
+by default and not needed for anything. Nothing is sold or unlocked through it: the user pays
+ElevenLabs directly under their own ElevenLabs account, and the app takes no part in that. With
+no key, read aloud uses the system's built-in voices.
+
+Settings > Also for Chrome links to a page about our free Chrome browser extension, for reading
+web articles on a computer. It is not a purchase and unlocks nothing in the app.
 ```
 
 ---
 
 ## Screenshots
 
-Required: 6.9" iPhone and 13" iPad. Apple will reuse the iPhone set for smaller sizes.
+Required: 6.9" iPhone (1320 x 2868) and 13" iPad (2064 x 2752). Apple scales these down for the
+smaller sizes. The Mac version needs its own set: 2880 x 1800 is the safest size.
 Up to 10 each. Good order, most important first:
 
 1. A card in the reader, Paper theme. The core idea in one image.
@@ -181,7 +207,7 @@ Up to 10 each. Good order, most important first:
 6. The shelf.
 7. Night theme.
 
-Take them with the simulator at the exact required sizes:
+The iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators produce exactly those sizes:
 
 ```bash
 xcrun simctl io "iPhone 17 Pro Max" screenshot --type=png shot.png
