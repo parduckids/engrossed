@@ -1,0 +1,450 @@
+/* Engrossed reader overlay.
+ *
+ * Everything here lives inside a shadow root, so none of it leaks into the page
+ * and none of the page's CSS reaches it. The colour values are the app's own
+ * PaperTheme, lifted verbatim so the two feel like one product.
+ */
+
+:host {
+  all: initial;
+  /* The host is a div inside a top-layer <dialog>, which is what actually
+     escapes the page. Here it only has to fill that dialog. */
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color-scheme: light dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+.root {
+  --radius: 14px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--paper));
+  color: rgb(var(--ink));
+  font-family: var(--font-stack);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Paper */
+.root[data-theme="paper"] { --paper: 250 249 246; --ink: 33 33 36;    --accent: 184 87 107; --accent-fill: 168 74 94;   --on-accent: 255 255 255; }
+/* Sepia */
+.root[data-theme="warm"]  { --paper: 246 238 221; --ink: 61 46 28;    --accent: 179 97 51;  --accent-fill: 161 84 41;   --on-accent: 255 255 255; }
+/* Slate */
+.root[data-theme="grey"]  { --paper: 43 46 51;    --ink: 230 232 237; --accent: 143 189 219; --accent-fill: 143 189 219; --on-accent: 26 26 28; }
+/* Night */
+.root[data-theme="dark"]  { --paper: 18 18 20;    --ink: 222 219 214; --accent: 222 153 133; --accent-fill: 222 153 133; --on-accent: 26 26 28; }
+
+.root[data-font="serif"]   { --font-stack: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif; }
+.root[data-font="sans"]    { --font-stack: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.root[data-font="rounded"] { --font-stack: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif; }
+.root[data-font="mono"]    { --font-stack: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
+
+/* ---------- top bar ---------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px 6px;
+  flex: 0 0 auto;
+}
+
+.bar .spacer { flex: 1; }
+
+.title {
+  font-size: 12.5px;
+  font-family: ui-rounded, system-ui, sans-serif;
+  color: rgb(var(--ink) / 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42vw;
+}
+
+button {
+  font: inherit;
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--ink) / 0.85);
+  background: rgb(var(--ink) / 0.07);
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 13px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+}
+button:hover { background: rgb(var(--ink) / 0.11); }
+button:active { transform: scale(0.97); }
+button:disabled { opacity: 0.25; cursor: default; }
+button.prominent {
+  background: rgb(var(--accent-fill));
+  color: rgb(var(--on-accent));
+}
+button.prominent:hover { background: rgb(var(--accent-fill) / 0.9); }
+button.quiet {
+  background: transparent;
+  color: rgb(var(--ink) / 0.45);
+  padding: 8px 10px;
+}
+button.quiet:hover { background: rgb(var(--ink) / 0.07); }
+.seg {
+  display: inline-flex;
+  background: rgb(var(--ink) / 0.07);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg button {
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+.seg button[aria-pressed="true"] {
+  background: rgb(var(--paper));
+  color: rgb(var(--ink));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+/* ---------- the card ---------- */
+
+.stage {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0 30px;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.column {
+  width: 100%;
+  max-width: min(var(--measure), 100vw - 60px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.tail {
+  color: rgb(var(--ink) / 0.22);
+  font-size: calc(var(--size) * 0.72px);
+  line-height: 1.35;
+  margin-bottom: 18px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.card {
+  font-size: calc(var(--size) * 1px);
+  /* SwiftUI's .lineSpacing(x) adds leading on top of the font's own line box,
+     which is about 1.2em. CSS line-height is the total. Without the +0.2 the
+     web version is visibly tighter than the app at the same stated number. */
+  line-height: calc(var(--leading) + 0.2);
+  overflow-y: auto;
+  max-height: 100%;
+  scrollbar-width: thin;
+}
+.card b { font-weight: 700; }
+
+.card.heading .label,
+.card.aside .label {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  color: rgb(var(--ink) / 0.45);
+  margin-bottom: 10px;
+}
+.card.heading .text {
+  font-size: calc(var(--size) * 1.25px);
+  font-weight: 600;
+  line-height: 1.25;
+}
+.card.aside .text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: calc(var(--size) * 0.68px);
+  line-height: 1.55;
+  color: rgb(var(--ink) / 0.8);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card.aside .box {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgb(var(--ink) / 0.05);
+  border: 1px solid rgb(var(--ink) / 0.1);
+}
+.card.figure img {
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 10px;
+  display: block;
+}
+.card.figure figcaption {
+  margin-top: 10px;
+  font-size: calc(var(--size) * 0.7px);
+  color: rgb(var(--ink) / 0.45);
+}
+
+/* ---------- flow ---------- */
+
+.flow {
+  position: relative;   /* so paragraph offsets are measured from here */
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 30px;
+  cursor: default;
+}
+/* Room above the first paragraph and below the last, so either can sit in the
+   middle of the view, which is where "you are here" is read from. */
+.flow .column { margin: 0 auto; max-width: min(var(--measure), 100vw - 60px); padding: 42vh 0; }
+.flow .para {
+  position: relative;
+  font-size: calc(var(--size) * 1px);
+  line-height: calc(var(--leading) + 0.2);
+  padding: 8px 0 8px 16px;
+  cursor: pointer;
+  transition: opacity 0.25s;
+}
+.flow .para[data-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: rgb(var(--accent) / 0.55);
+}
+
+/* ---------- footer ---------- */
+
+.foot {
+  flex: 0 0 auto;
+  padding: 10px 30px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.controls { display: flex; align-items: center; gap: 10px; }
+.controls .spacer { flex: 1; }
+
+.progress { display: flex; align-items: center; gap: 12px; }
+.counter {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 11.5px;
+  color: rgb(var(--ink) / 0.45);
+  white-space: nowrap;
+}
+.dots { display: flex; gap: 5px; flex: 1; justify-content: flex-end; }
+.dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgb(var(--ink) / 0.18);
+}
+.dot[data-on="true"] { width: 7px; height: 7px; background: rgb(var(--accent) / 0.85); }
+
+.bar-track {
+  height: 2.5px;
+  border-radius: 2px;
+  background: rgb(var(--ink) / 0.1);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: rgb(var(--accent) / 0.75);
+  transition: width 0.35s;
+}
+
+/* ---------- settings panel ---------- */
+
+.sheet {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--paper));
+  overflow-y: auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.sheet h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+.group { display: flex; flex-direction: column; gap: 11px; }
+.group > .label {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  color: rgb(var(--ink) / 0.45);
+}
+.caption {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 11.5px;
+  color: rgb(var(--ink) / 0.45);
+}
+.row { display: flex; align-items: center; gap: 12px; }
+.row label {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 13px;
+  width: 104px;
+  flex: 0 0 auto;
+}
+.row input[type="range"] { flex: 1; accent-color: rgb(var(--accent)); }
+.row .readout {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: rgb(var(--ink) / 0.45);
+  width: 54px;
+  text-align: right;
+}
+.switch { display: flex; align-items: center; gap: 10px; font-size: 13px;
+          font-family: ui-rounded, system-ui, sans-serif; }
+.switch input { accent-color: rgb(var(--accent)); width: 16px; height: 16px; }
+
+/* ---------- empty state ---------- */
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 40px;
+}
+.empty p { margin: 0; font-size: 15px; color: rgb(var(--ink) / 0.6); max-width: 34ch; }
+
+/* ---------- sprint pill ---------- */
+
+.pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: rgb(var(--accent));
+  background: rgb(var(--accent) / 0.12);
+  padding: 6px 11px;
+}
+.pill[data-paused="true"] { opacity: 0.5; }
+
+/* ---------- resume note ---------- */
+
+.resumed {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgb(var(--accent) / 0.85);
+  margin-bottom: 14px;
+}
+
+button.listening { color: rgb(var(--accent)); }
+
+/* Why the voice changed, when ElevenLabs could not read a card. Quiet on purpose. */
+.voice-note {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: rgb(var(--ink) / 0.45);
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* ---------- checkpoint and break ---------- */
+
+.panel {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--paper));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+}
+.panel .inner {
+  max-width: 34rem;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.panel .label {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  color: rgb(var(--ink) / 0.45);
+}
+.panel .question {
+  font-size: calc(var(--size) * 1.2px);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.panel .body {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgb(var(--ink) / 0.6);
+}
+.panel .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+
+/* ---------- contents ---------- */
+
+.contents { display: flex; flex-direction: column; gap: 2px; max-width: 40rem; }
+.contents .entry {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  background: transparent;
+  font-family: var(--font-stack);
+  font-size: 16px;
+  font-weight: 400;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-radius: 10px;
+}
+.contents .entry:hover { background: rgb(var(--ink) / 0.06); }
+.contents .entry.here { background: rgb(var(--accent) / 0.1); }
+.contents .marker {
+  margin-left: auto;
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 11px;
+  color: rgb(var(--accent));
+  white-space: nowrap;
+}
+
+/* ---------- settings additions ---------- */
+
+.group-item { display: flex; flex-direction: column; gap: 6px; }
+select {
+  flex: 1;
+  font: inherit;
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 13px;
+  color: rgb(var(--ink));
+  background: rgb(var(--ink) / 0.06);
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

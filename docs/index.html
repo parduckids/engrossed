@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engrossed</title>
+  <meta name="description" content="Read long texts without losing focus: a few sentences at a time, with your place saved.">
+  <style>
+    :root { --paper: #faf9f6; --ink: #212124; --faint: #212124a6; --accent: #b8576b; --tile: #2121240a; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #121214; --ink: #dedbd6; --faint: #dedbd6a6; --accent: #de9985; --tile: #dedbd60f; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 72px 20px 80px;
+      background: var(--paper); color: var(--ink);
+      font: 17px/1.6 ui-serif, Georgia, "Iowan Old Style", serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 36rem; margin: 0 auto; }
+    h1 { font-size: 40px; line-height: 1.1; margin: 0 0 10px; }
+    .lede { font-size: 20px; margin: 0 0 40px; }
+    .label { font-family: ui-rounded, system-ui, sans-serif; font-size: 12px; font-weight: 500;
+             letter-spacing: 0.6px; color: var(--faint); margin: 36px 0 12px; }
+    .tile { display: block; padding: 16px 18px; border-radius: 14px; background: var(--tile);
+            color: inherit; text-decoration: none; margin-bottom: 10px; }
+    .tile strong { display: block; }
+    .tile span { font-family: ui-rounded, system-ui, sans-serif; font-size: 14px; color: var(--faint); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Engrossed</h1>
+  <p class="lede">Read long texts without losing focus: a few sentences at a time, with your place saved.</p>
+
+  <p>Made for anyone whose mind wanders while reading. Engrossed shows a book or an article a few
+  sentences at a time, with nothing else on the screen, and remembers exactly where you stopped.</p>
+
+  <p class="label">PRIVACY</p>
+  <a class="tile" href="privacy/app.html">
+    <strong>The Engrossed app</strong>
+    <span>For iPhone, iPad and Mac</span>
+  </a>
+  <a class="tile" href="privacy/chrome.html">
+    <strong>Engrossed for Chrome</strong>
+    <span>The browser extension</span>
+  </a>
+
+  <p class="label">SUPPORT</p>
+  <p>Questions, problems or ideas: <a href="mailto:parduckids@gmail.com">parduckids@gmail.com</a></p>
+</main>
+</body>
+</html>

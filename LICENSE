@@ -1,0 +1,8 @@
+Copyright (c) 2026 Adam Vörös. All rights reserved.
+
+This repository and everything in it is proprietary. No licence is granted to
+use, copy, modify or distribute any part of it without written permission.
+
+Third-party code keeps its own licence:
+  engrossed-web/vendor/readability.js  Mozilla Readability, Apache License 2.0
+                                       (see engrossed-web/vendor/LICENSE)

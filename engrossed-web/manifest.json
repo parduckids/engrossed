@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Engrossed",
+  "version": "0.1.0",
+  "description": "Read any article one small card at a time, with your place saved. For anyone who loses the thread on a wall of text.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "action": {
+    "default_title": "Read this page in Engrossed",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+E", "mac": "Command+Shift+E" },
+      "description": "Read this page in Engrossed"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/reader/*", "vendor/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

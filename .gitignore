@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Xcode
+**/xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Chrome extension
+engrossed-web/node_modules/
+engrossed-web/dist/
+engrossed-web/test/fixtures-private/
+
+# Secrets never belong in this repository, private or not.
+.env
+.env.*
+*.pem
+*.p8
+*.p12
+*.mobileprovision
+*.provisionprofile

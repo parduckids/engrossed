@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>What the tide leaves behind — Shoreline Notes</title>
+</head>
+<body>
+  <header class="site-header">
+    <nav>
+      <a href="/">Home</a>
+      <a href="/archive">Archive</a>
+      <a href="/about">About</a>
+    </nav>
+  </header>
+
+  <div class="promo">Subscribe to the newsletter! Only $3 a month!</div>
+
+  <article>
+    <h1>What the tide leaves behind</h1>
+    <p class="byline">by Marin Okafor</p>
+
+    <p>A rock pool is a rehearsal for the whole ocean. Twice a day the water withdraws and
+    leaves a bowl of it stranded on the shore, and for six hours everything living in that
+    bowl has to manage without the sea. The temperature climbs. The salt concentrates. The
+    oxygen thins out. Nothing about it is comfortable, and yet the pools are the most
+    crowded places on the coast.</p>
+
+    <p>Dr. Aleen Vasquez has spent eleven seasons counting the animals in a single stretch
+    of granite shelf. Her argument is that the crowding is not despite the hardship but
+    because of it. A creature that can survive six hours of a hot, salty, airless bowl can
+    survive almost anything else the shore throws at it, and in exchange it gets a address
+    that larger predators cannot reach at low water.</p>
+
+    <h2>Measuring a pool</h2>
+
+    <p>The standard method is a quadrat: a square frame laid on the rock, with everything
+    inside it identified and counted. It sounds crude and it is, but it has the advantage of
+    being repeatable by anyone, which is why the records go back to the 1930s in some
+    places.</p>
+
+    <figure>
+      <img src="/img/quadrat.jpg" alt="A square metal frame resting on wet rock">
+      <figcaption>A half-metre quadrat on the lower shelf at Carrick Point.</figcaption>
+    </figure>
+
+    <p>What the long records show is not a steady picture. Populations in the pools swing
+    hard from year to year, far harder than populations in the open subtidal zone a few
+    metres away. See Fig. 4 for the clearest example, a twenty-year run of limpet counts
+    that looks more like weather than biology.</p>
+
+    <h2>A rough model</h2>
+
+    <p>The simplest model that reproduces the swings treats each pool as a small island,
+    repopulated every season from a shared larval pool. Something like this:</p>
+
+    <pre><code>def settle(pool, larvae, carrying_capacity):
+    arrivals = larvae * pool.exposure
+    survivors = min(arrivals, carrying_capacity - pool.occupied)
+    pool.occupied += max(survivors, 0)
+    return pool</code></pre>
+
+    <p>It is far too simple to predict anything. What it does do is show that you get wild
+    swings without needing to invent a cause for them: random arrival into a small space is
+    enough on its own, which is a useful thing to know before you start looking for a
+    pollutant.</p>
+
+    <table>
+      <tr><th>Year</th><th>Limpets</th><th>Anemones</th></tr>
+      <tr><td>2019</td><td>412</td><td>88</td></tr>
+      <tr><td>2020</td><td>97</td><td>91</td></tr>
+      <tr><td>2021</td><td>530</td><td>79</td></tr>
+    </table>
+
+    <h2>What to look at</h2>
+
+    <ul>
+      <li>Start at the lowest pool you can reach safely and work upward, because the lower
+      pools are richer and will calibrate your eye for the sparse ones.</li>
+      <li>Look under the ledges rather than at the open floor, since almost everything
+      mobile is hiding from the light and the gulls.</li>
+      <li>Go back to the same pool. One visit tells you almost nothing at all.</li>
+    </ul>
+
+    <p>The last point is the one people skip. A single visit to a rock pool is a photograph
+    of a room taken through a keyhole, and the whole interest of the place is in how
+    violently it changes between one visit and the next.</p>
+  </article>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 Shoreline Notes. All rights reserved.</p>
+    <nav><a href="/privacy">Privacy</a> <a href="/terms">Terms</a></nav>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Engrossed options</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --paper: 250 249 246; --ink: 33 33 36; --accent: 184 87 107; --accent-fill: 168 74 94; --on-accent: 255 255 255;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: 18 18 20; --ink: 222 219 214; --accent: 222 153 133; --accent-fill: 222 153 133; --on-accent: 26 26 28; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: rgb(var(--paper));
+      color: rgb(var(--ink));
+      font-family: ui-serif, Georgia, "Iowan Old Style", serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { width: 100%; max-width: 34rem; }
+    h1 { font-size: 34px; font-weight: 600; margin: 0 0 6px; }
+    .lede, .label, .small, .status, input, button, .saved {
+      font-family: ui-rounded, system-ui, sans-serif;
+    }
+    .lede { font-size: 15px; color: rgb(var(--ink) / 0.5); margin: 0 0 36px; }
+    h2 { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+    .label {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.6px;
+      color: rgb(var(--ink) / 0.45);
+      margin: 24px 0 10px;
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input {
+      flex: 1 1 16rem;
+      min-width: 0;
+      font-size: 15px;
+      color: rgb(var(--ink));
+      background: rgb(var(--ink) / 0.06);
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 11px 14px;
+      /* Masked like a password, without inviting the password manager to keep it. */
+      -webkit-text-security: disc;
+    }
+    input::placeholder { color: rgb(var(--ink) / 0.4); }
+    input:focus { outline: none; border-color: rgb(var(--accent) / 0.6); }
+    button {
+      font-size: 15px;
+      font-weight: 500;
+      color: rgb(var(--ink) / 0.85);
+      background: rgb(var(--ink) / 0.07);
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 18px;
+      cursor: pointer;
+    }
+    button:hover { background: rgb(var(--ink) / 0.11); }
+    button:focus-visible, input:focus-visible { outline: 2px solid rgb(var(--accent) / 0.6); outline-offset: 2px; }
+    button.prominent { color: rgb(var(--on-accent)); background: rgb(var(--accent-fill)); }
+    button.prominent:hover { background: rgb(var(--accent-fill) / 0.9); }
+    .saved { font-size: 15px; margin: 0; flex: 1 1 auto; }
+    .seg {
+      display: inline-flex;
+      background: rgb(var(--ink) / 0.07);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .seg button { background: transparent; padding: 8px 18px; border-radius: 9px; font-size: 14px; }
+    .seg button[aria-pressed="true"] {
+      background: rgb(var(--paper));
+      color: rgb(var(--ink));
+      box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+    }
+    .small {
+      font-size: 12.5px;
+      color: rgb(var(--ink) / 0.45);
+      margin-top: 28px;
+      line-height: 1.5;
+    }
+    .status { font-size: 13px; color: rgb(var(--accent)); min-height: 1.4em; margin: 12px 0 0; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Engrossed</h1>
+    <p class="lede">Read aloud</p>
+
+    <h2>ElevenLabs voices (optional)</h2>
+
+    <form id="key-form" class="row" autocomplete="off" hidden>
+      <input id="key" type="text" placeholder="Paste an ElevenLabs API key" aria-label="ElevenLabs API key"
+             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="prominent" type="submit">Save</button>
+    </form>
+
+    <div id="saved" class="row" hidden>
+      <p class="saved">A key is saved.</p>
+      <button id="remove" type="button">Remove key</button>
+    </div>
+
+    <div id="voice" hidden>
+      <p class="label">VOICE</p>
+      <div id="voices" class="seg" role="group" aria-label="Voice"></div>
+    </div>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <p class="small">
+      Needs a paid ElevenLabs plan. While an ElevenLabs voice is reading, the text of each card is sent
+      to ElevenLabs with your key. Nothing else is sent.
+    </p>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

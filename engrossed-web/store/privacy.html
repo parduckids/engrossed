@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engrossed for Chrome: Privacy Policy</title>
+  <style>
+    :root { --paper: #faf9f6; --ink: #212124; --faint: #212124a6; --accent: #b8576b; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #121214; --ink: #dedbd6; --faint: #dedbd6a6; --accent: #de9985; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 56px 20px 80px;
+      background: var(--paper); color: var(--ink);
+      font: 17px/1.65 ui-serif, Georgia, "Iowan Old Style", serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 38rem; margin: 0 auto; }
+    h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; }
+    h2 { font-size: 19px; margin: 36px 0 8px; }
+    .date, .label { font-family: ui-rounded, system-ui, sans-serif; font-size: 13px; color: var(--faint); }
+    .short { border-left: 3px solid var(--accent); padding: 2px 0 2px 16px; margin: 28px 0; }
+    ul { padding-left: 1.2em; }
+    li { margin-bottom: 8px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Engrossed for Chrome: Privacy Policy</h1>
+  <p class="date">Last updated 27 October 2026</p>
+
+  <div class="short">
+    <p><strong>The short version.</strong> Engrossed reads the article on the tab you click it on,
+    on your own computer. It has no account, no servers and no analytics, and it collects nothing.
+    By default nothing leaves your computer at all. The only exceptions are voices you choose
+    yourself, described below.</p>
+  </div>
+
+  <h2>When it runs</h2>
+  <p>Only when you click the Engrossed button, and only on that tab. It cannot see any other tab,
+  and it cannot see any page until you click. It does not run in the background on the sites you visit.</p>
+
+  <h2>What is stored, and where</h2>
+  <p>Everything is kept in your browser's own extension storage, on your computer:</p>
+  <ul>
+    <li><strong>Your place in each article:</strong> the article's address (with tracking parameters
+      removed), which card you were on, and the first few words of that card, so your place can be
+      found again if the article changes.</li>
+    <li><strong>Your reading preferences</strong>, such as theme, text size and card size. If you have
+      turned on Chrome Sync, Chrome syncs these to your other computers through your Google account.
+      Your reading positions and your ElevenLabs key are never synced.</li>
+    <li><strong>The sprint timer</strong>, so a sprint can carry on into the next article.</li>
+    <li><strong>Your ElevenLabs API key</strong>, only if you add one. It stays on this computer.</li>
+  </ul>
+  <p>Removing the extension removes all of it.</p>
+
+  <h2>What can leave your computer, and only if you choose it</h2>
+  <ul>
+    <li><strong>ElevenLabs voices.</strong> If you add your own ElevenLabs API key and choose an
+      ElevenLabs voice, the text of each card being read aloud is sent to ElevenLabs, together with
+      your key, so ElevenLabs can turn it into speech. Nothing else is sent: not the page address,
+      not other cards, not your reading history. That processing is covered by
+      <a href="https://elevenlabs.io/privacy-policy">ElevenLabs' own privacy policy</a>. Remove the key
+      in Engrossed's settings and nothing more is sent.</li>
+    <li><strong>Chrome's online voices.</strong> Some of the voices Chrome offers for reading aloud are
+      online voices, and they are labelled as such. If you pick one, Chrome sends the text to Google to
+      be spoken, under Google's privacy policy. Engrossed's automatic voice choice is always one that
+      runs on your computer.</li>
+  </ul>
+
+  <h2>What is not collected</h2>
+  <p>No personal information, no email address, no browsing history, no analytics, telemetry, crash
+  reports, advertising identifiers or cookies. There are no third-party libraries that collect any of
+  it. The one library Engrossed includes, Mozilla Readability, runs entirely on your computer.</p>
+
+  <h2>Children</h2>
+  <p>Engrossed is suitable for all ages and collects nothing from anyone, including children.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the date at the top changes with it.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about privacy: <a href="mailto:parduckids@gmail.com">parduckids@gmail.com</a></p>
+</main>
+</body>
+</html>

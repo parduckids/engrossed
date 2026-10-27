@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.lowshelf.engrossed.scheme</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>engrossed</string>
+			</array>
+		</dict>
+	</array>
+	<!-- LSSupportsOpeningDocumentsInPlace is deliberately absent. iOS then hands
+	     the app its own copy in Documents/Inbox rather than the reader's original
+	     file, which is what we want: Engrossed copies every book into its own
+	     store and never modifies the original. Library.discardInboxCopy deletes
+	     that temporary copy once the import is done.
+
+	     UISupportsDocumentBrowser=false is the other half of that statement: we
+	     are not a document browser app. Declaring one of the two keys is what
+	     stops the build warning about not saying whether we open in place. -->
+	<key>UISupportsDocumentBrowser</key>
+	<false/>
+	<!-- The app uses no encryption of its own. StoreKit, and the optional
+	     ElevenLabs voices, both go over the system's standard HTTPS, so it is
+	     exempt. Without this key every build stops for a manual answer in
+	     App Store Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>EPUB Book</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.idpf.epub-container</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PDF Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

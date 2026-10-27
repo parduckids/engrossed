@@ -1,0 +1,14 @@
+{
+  "name": "engrossed-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Engrossed for the web - read any article in small, focused cards.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "package": "npm test && rm -rf dist && mkdir -p dist && zip -rq \"dist/engrossed-web-$npm_package_version.zip\" manifest.json icons src vendor -x \"*.DS_Store\""
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
