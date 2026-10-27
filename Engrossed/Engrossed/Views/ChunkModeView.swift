@@ -181,20 +181,18 @@ struct ChunkModeView: View {
     }
 
     private func speakIfNeeded(force: Bool = false) {
-        guard settings.speechEnabled || force, let chunk else { return }
         // Reading a table of numbers aloud helps nobody.
-        guard chunk.isProse else {
-            // An ElevenLabs card still on its way for the card before must not
-            // start over this one.
+        guard settings.speechEnabled || force, let chunk, chunk.isProse else {
+            // Nothing is read on this card, so an ElevenLabs card still on its
+            // way for the card before must not start over this one. That holds
+            // when read aloud was switched off in Settings while it was on its
+            // way, too. Does nothing for the built-in voice.
             narrator.dropPendingAudio()
             return
         }
-        narrator.speak(chunk.text, rate: settings.speechRate)
-        // Lets an ElevenLabs voice start the next card without a pause for the
-        // network. Does nothing for the built-in voice.
-        if let next = nextSpokenCard {
-            narrator.prepare(next.text, rate: settings.speechRate)
-        }
+        // The next card lets an ElevenLabs voice start it without a pause for
+        // the network. Ignored by the built-in voice.
+        narrator.speak(chunk.text, rate: settings.speechRate, next: nextSpokenCard?.text)
     }
 
     /// The card the voice will move on to by itself when this one ends, if

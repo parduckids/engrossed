@@ -24,7 +24,25 @@ final class Narrator {
     /// Why the ElevenLabs voice stepped aside, in one sentence. Set once when a
     /// request fails and kept for the rest of the book, so the reader can see
     /// why the voice changed without being interrupted by it.
-    private(set) var notice: String?
+    ///
+    /// Only while it is still true, though. Removing the key, saving a new one
+    /// or choosing the other voice takes it away at once: a sentence about a
+    /// key that is no longer there would only confuse.
+    var notice: String? {
+        guard let steppedAside,
+              ReadingSettings.shared.hasElevenLabsKey,
+              steppedAside.attempt == currentAttempt() else { return nil }
+        return steppedAside.failure.message
+    }
+
+    /// The failure behind `notice`, with the key and voice it happened with.
+    /// Observed, unlike the rest of the bookkeeping, because `notice` is shown.
+    private var steppedAside: StepAside?
+
+    private struct StepAside {
+        let attempt: Attempt
+        let failure: ElevenLabs.Failure
+    }
 
     private let synthesizer = AVSpeechSynthesizer()
     private let delegateBox = DelegateBox()
@@ -65,14 +83,13 @@ final class Narrator {
     @ObservationIgnored private var playing: Card?
     /// The card that has been asked for and is still on its way.
     @ObservationIgnored private var awaiting: Card?
-    /// The next card, handed over by `prepare`, waiting for this one to start.
+    /// The next card, handed over with `speak`, waiting for this one to start.
     @ObservationIgnored private var upNext: (text: String, rate: Double)?
     /// The next card once its request has actually gone out.
     @ObservationIgnored private var prefetching: ElevenLabs.Line?
     @ObservationIgnored private var requests: [ElevenLabs.Line: Pending] = [:]
     @ObservationIgnored private var requestCount = 0
     @ObservationIgnored private var cache = ElevenLabs.AudioCache(limit: 20)
-    @ObservationIgnored private var failedAttempt: Attempt?
 
     init() {
         delegateBox.onFinish = { [weak self] in
@@ -92,34 +109,36 @@ final class Narrator {
     /// Called when an utterance completes, so Cards mode can auto-advance.
     var onFinish: (() -> Void)?
 
-    func speak(_ text: String, rate: Double) {
+    /// Reads one card aloud.
+    ///
+    /// `next` is the card the voice will move on to by itself when this one
+    /// ends, if there is one, so the paid voice can start it the moment this
+    /// one ends instead of after a pause for the network. Nothing is fetched
+    /// for it until this card's own audio is actually playing: if this card
+    /// fails, or the reader stops before it starts, the next one is never paid
+    /// for. Does nothing at all for the built-in voice.
+    ///
+    /// It comes in the same call, not a second one, so that a request already
+    /// on its way for it is known to be wanted before anything is let go. That
+    /// is the reader who taps Next and then Back straight away: the card they
+    /// stepped back from is the next card again, and its request is kept
+    /// rather than cancelled and paid for a second time.
+    func speak(_ text: String, rate: Double, next: String? = nil) {
         halt()
+        prefetching = nil
         configureAudioSession()
         isSpeaking = true
         if let paid = elevenLabs(),
            let line = ElevenLabs.Line(text: text, voice: paid.attempt.voice, speechRate: rate) {
+            upNext = next.map { (text: $0, rate: rate) }
             speakWithElevenLabs(Card(line: line, text: text, rate: rate, attempt: paid.attempt),
                                 key: paid.key)
         } else {
             speakBuiltIn(text, rate: rate)
         }
-        // Whatever was fetched ahead is now either the card just started, held
-        // as `awaiting`, or one the reader skipped past. Either way it is no
-        // longer "next", and anything still on its way for a skipped card is
-        // let go.
-        prefetching = nil
+        // Anything still on its way for a card that is neither this one nor
+        // the next is for a card the reader skipped past, and is let go.
         cancelUnwantedRequests()
-    }
-
-    /// Readies the card after this one, so the paid voice can start the moment
-    /// this one ends instead of after a pause for the network.
-    ///
-    /// Nothing is fetched until this card's own audio is actually playing. If
-    /// this card fails, or the reader stops before it starts, the next one is
-    /// never paid for. Does nothing at all for the built-in voice.
-    func prepare(_ text: String, rate: Double) {
-        upNext = (text, rate)
-        prefetchIfPlaying()
     }
 
     func stop() {
@@ -129,7 +148,8 @@ final class Narrator {
     }
 
     /// The reader moved to a card that isn't read aloud, such as a table or a
-    /// figure. Whatever is already playing carries on, exactly as the built-in
+    /// figure, or moved with read aloud switched off. Whatever is already
+    /// playing carries on, exactly as the built-in
     /// voice always has. But paid audio still on its way for the card before is
     /// dropped, because it would otherwise start over a card it doesn't belong
     /// to.
@@ -195,12 +215,11 @@ final class Narrator {
     private func elevenLabs() -> Paid? {
         guard ReadingSettings.shared.hasElevenLabsKey else { return nil }
         let attempt = currentAttempt()
-        if let failed = failedAttempt {
-            guard failed != attempt else { return nil }
+        if let steppedAside {
+            guard steppedAside.attempt != attempt else { return nil }
             // A new key, or the other voice, since it failed. That deserves a
             // fresh try, and the old sentence no longer applies.
-            failedAttempt = nil
-            notice = nil
+            self.steppedAside = nil
         }
         guard let saved = Keychain.read(.elevenLabsKey),
               let key = ElevenLabs.cleanedKey(saved) else { return nil }
@@ -315,27 +334,36 @@ final class Narrator {
         }
     }
 
-    /// Fetches the card handed over by `prepare`, once this card is playing.
+    /// Fetches the card handed over with `speak`, once this card is playing.
+    /// One that is already on its way is shared, not asked for again.
     private func prefetchIfPlaying() {
         guard player != nil, let next = upNext else { return }
         upNext = nil
-        guard let paid = elevenLabs(),
-              let line = ElevenLabs.Line(text: next.text, voice: paid.attempt.voice,
-                                         speechRate: next.rate) else { return }
-        prefetching = line
-        if cache.audio(for: line) == nil {
-            _ = request(line, key: paid.key, attempt: paid.attempt)
+        if let paid = elevenLabs(),
+           let line = ElevenLabs.Line(text: next.text, voice: paid.attempt.voice,
+                                      speechRate: next.rate) {
+            prefetching = line
+            if cache.audio(for: line) == nil {
+                _ = request(line, key: paid.key, attempt: paid.attempt)
+            }
         }
         cancelUnwantedRequests()
     }
 
     /// Lets go of every request no card wants any more: anything other than the
-    /// card being waited for and the one fetched ahead. That keeps at most two
-    /// open at once, which matters because ElevenLabs limits how many requests
-    /// one account can have in flight, and tripping that limit by ourselves
-    /// would look to the reader like their account had failed.
+    /// card being waited for and the one after it. That keeps at most two open
+    /// at once, which matters because ElevenLabs limits how many requests one
+    /// account can have in flight, and tripping that limit by ourselves would
+    /// look to the reader like their account had failed.
+    ///
+    /// The card after it counts as wanted even before this one plays, but only
+    /// to keep a request that is already on its way. Nothing new is sent for
+    /// it until then.
     private func cancelUnwantedRequests() {
-        let wanted = [awaiting?.line, prefetching].compactMap { $0 }
+        let next = upNext.flatMap {
+            ElevenLabs.Line(text: $0.text, voice: currentAttempt().voice, speechRate: $0.rate)
+        }
+        let wanted = [awaiting?.line, prefetching, next].compactMap { $0 }
         for (line, pending) in requests where !wanted.contains(line) {
             pending.task.cancel()
             requests[line] = nil
@@ -350,9 +378,8 @@ final class Narrator {
     private func stepAside(_ failure: ElevenLabs.Failure, _ attempt: Attempt) {
         // A late failure from a key or voice the reader has already changed
         // says nothing about the current one.
-        guard failedAttempt != attempt, attempt == currentAttempt() else { return }
-        failedAttempt = attempt
-        notice = failure.message
+        guard steppedAside?.attempt != attempt, attempt == currentAttempt() else { return }
+        steppedAside = StepAside(attempt: attempt, failure: failure)
         upNext = nil
         prefetching = nil
         cancelUnwantedRequests()

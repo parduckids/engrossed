@@ -7,12 +7,14 @@
 // rather than host permissions, so it cannot read any page until you point it
 // at one, and installing it shows no "read your data on all websites" warning.
 // In MV3 this worker is terminated whenever Chrome feels like it, so it holds
-// no state at all — everything that must survive lives in chrome.storage.
+// no state at all: everything that must survive lives in chrome.storage, or,
+// for the ElevenLabs key, in the extension's own IndexedDB (src/keystore.js).
 
 import {
-  KEY_STORAGE, MESSAGES, buildRequest, cleanKey, detailStatusOf, messageFor,
-  speakable, toBase64, voiceChoices, voiceFromURI,
+  MESSAGES, buildRequest, detailStatusOf, messageFor, speakable, toBase64,
+  voiceChoices, voiceFromURI,
 } from "./eleven.js";
+import { moveLegacyKey, readKey } from "./keystore.js";
 
 // Pages Chrome forbids every extension from touching. The New Tab page is the
 // one that matters most: it is where a first click is likely to land, and a
@@ -25,6 +27,9 @@ const WEB_STORE = /^https:\/\/(chromewebstore\.google\.com|chrome\.google\.com\/
 // event, and the click is silently dropped.
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === "install") openWelcome();
+  // An earlier build kept the ElevenLabs key in chrome.storage.local, which
+  // the reader on the page can read. Take it out of there.
+  moveLegacyKey(chrome.storage.local);
 });
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -72,7 +77,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || typeof message?.type !== "string") return false;
 
   if (message.type === "eleven:status") {
-    savedKey().then((key) => sendResponse({ configured: Boolean(key), voices: voiceChoices() }));
+    readKey().then((key) => sendResponse({ configured: Boolean(key), voices: voiceChoices() }));
     return true;
   }
   if (message.type === "eleven:speak") {
@@ -91,15 +96,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ElevenLabs gets this long before the built-in voice takes the card.
 const ELEVEN_TIMEOUT_MS = 20_000;
 
-async function savedKey() {
-  try {
-    const got = await chrome.storage.local.get(KEY_STORAGE);
-    return cleanKey(got?.[KEY_STORAGE]);
-  } catch {
-    return "";
-  }
-}
-
 // One card, one request. No retries: on any failure the reader reads that card
 // with the built-in voice and stays on it, so a broken key costs one request.
 // Nothing here is logged. The key must never reach a console, a message or a URL.
@@ -107,7 +103,7 @@ async function speakWithEleven({ text, voice, speed }) {
   const name = voiceFromURI(voice);
   if (!name || !speakable(text)) return { ok: false, message: MESSAGES.unreachable };
 
-  const key = await savedKey();
+  const key = await readKey();
   // Settings sync, so the voice can be chosen on a machine with no key. That
   // is not a fault: the built-in voice reads instead, without a message.
   if (!key) return { ok: false, message: "" };

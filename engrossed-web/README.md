@@ -20,11 +20,15 @@ pointed at the web instead of at books. Separate codebase, same rules.
 
 | | |
 |---|---|
-| `src/background.js` | service worker; the toolbar click injects the reader |
+| `src/background.js` | service worker; the toolbar click injects the reader, and it makes the ElevenLabs requests |
 | `src/reader/extract.js` | page → typed blocks, via Mozilla Readability |
 | `src/reader/chunker.js` | blocks → cards. **A port of the app's `Chunker.swift`** |
 | `src/reader/position.js` | your place, per article |
 | `src/reader/main.js` | the overlay: cards, flow, settings |
+| `src/reader/eleven-speech.js` | plays a card in an ElevenLabs voice; never holds the key |
+| `src/eleven.js` | ElevenLabs request, the two voice ids, error messages |
+| `src/keystore.js` | the ElevenLabs key, in the extension's own IndexedDB |
+| `src/options.html` | where an ElevenLabs key is pasted or removed |
 | `vendor/readability.js` | Mozilla Readability, Apache-2.0, unmodified |
 
 The hard part of the app did not need porting. `TextExtractor.swift` is ~700
@@ -90,9 +94,14 @@ plain ES modules.
 - **Read aloud**: Chrome's built-in voices, a sentence at a time, moving on by
   itself. The automatic voice is always an on-device one; online voices send
   text to Google and are labelled as such.
+- **ElevenLabs voices (optional)**: paste your own ElevenLabs API key on the
+  options page and choose Woman or Man. The key is kept in the extension's own
+  IndexedDB, never in `chrome.storage` (the reader on the page can read that)
+  and never synced; only the service worker reads it. If ElevenLabs fails, that
+  card is read with the built-in voice and so is the rest of the session.
 - Four themes, four fonts, three card sizes, fixation bolding.
 
 ## Not in this version
 
-Pace mode (RSVP), a shelf listing the articles you have read, figure zoom, and
-ElevenLabs or other paid voices. None of them change the architecture.
+Pace mode (RSVP), a shelf listing the articles you have read, and figure zoom.
+None of them change the architecture.

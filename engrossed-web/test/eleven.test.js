@@ -4,12 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  VOICES, MESSAGES, MODEL_ID, OUTPUT_FORMAT, KEY_STORAGE, buildRequest, cleanKey,
+  VOICES, MESSAGES, MODEL_ID, OUTPUT_FORMAT, buildRequest, cleanKey,
   detailStatusOf, messageFor, speakable, speedFor, toBase64, uriFor, voiceChoices, voiceFromURI,
 } from "../src/eleven.js";
 import {
   ElevenNarrator, UNREACHABLE, elevenStatus, isSpoken, nextSpokenIndex,
 } from "../src/reader/eleven-speech.js";
+import { LEGACY_LOCAL_KEY, moveLegacyKey, readKey, removeKey, saveKey } from "../src/keystore.js";
+import { fakeIndexedDB } from "./helpers/idb.js";
 
 // Never a real key, anywhere.
 const FAKE_KEY = "test-key-not-real";
@@ -379,18 +381,24 @@ test("the reader learns only whether a key exists, never the key", async () => {
 
 test("the worker answers only this extension, reads the key itself, and never returns it", async (t) => {
   const listeners = {};
-  const store = { [KEY_STORAGE]: `  ${FAKE_KEY} ` };
   const event = (name) => ({ addListener: (fn) => { listeners[name] = fn; } });
+  // chrome.storage.local is the reader's own store. The worker must not use it for the key.
+  const local = {
+    get: async () => { throw new Error("the worker read chrome.storage.local"); },
+    remove: async () => {},
+  };
   globalThis.chrome = {
     runtime: { id: "engrossed-test-id", onInstalled: event("installed"), onMessage: event("message"), openOptionsPage: async () => {} },
     action: { onClicked: event("clicked") },
-    storage: { local: { get: async (key) => ({ [key]: store[key] }) } },
+    storage: { local },
   };
+  globalThis.indexedDB = fakeIndexedDB();
+  await saveKey(`  ${FAKE_KEY} `);
   const realFetch = globalThis.fetch;
   const calls = [];
   let reply = () => new Response(new Uint8Array([1, 2, 3]), { status: 200 });
   globalThis.fetch = async (url, init) => { calls.push({ url, init }); return reply(); };
-  t.after(() => { globalThis.fetch = realFetch; delete globalThis.chrome; });
+  t.after(() => { globalThis.fetch = realFetch; delete globalThis.chrome; delete globalThis.indexedDB; });
 
   await import("../src/background.js");
   const ask = (message, sender = { id: "engrossed-test-id" }) => new Promise((resolve) => {
@@ -422,10 +430,106 @@ test("the worker answers only this extension, reads the key itself, and never re
 
   for (const answer of [ok, paid]) assert.ok(!JSON.stringify(answer).includes(FAKE_KEY));
 
-  delete store[KEY_STORAGE];
+  await removeKey();
   assert.deepEqual(await ask({ type: "eleven:status" }), { configured: false, voices: voiceChoices() });
   const before = calls.length;
   assert.deepEqual(await ask({ type: "eleven:speak", text: "A card.", voice: "eleven:woman", speed: 1 }),
                    { ok: false, message: "" }, "with no key the built-in voice reads, quietly");
   assert.equal(calls.length, before);
+});
+
+// ---------- where the key is kept ----------
+
+test("the key is kept in the extension's IndexedDB, trimmed, and Remove really deletes it", async (t) => {
+  const idb = fakeIndexedDB();
+  globalThis.indexedDB = idb;
+  t.after(() => { delete globalThis.indexedDB; });
+
+  assert.equal(await readKey(), "", "a key before one was saved");
+  await saveKey(`\n  ${FAKE_KEY}  `);
+  assert.equal(await readKey(), FAKE_KEY);
+  assert.deepEqual([...idb.stores.get("secrets").values()], [FAKE_KEY], "stored untrimmed");
+
+  await assert.rejects(saveKey("   "), "saved an empty key");
+  assert.equal(await readKey(), FAKE_KEY, "an empty save wiped the key");
+
+  await removeKey();
+  assert.equal(await readKey(), "");
+  assert.equal(idb.stores.get("secrets").size, 0, "Remove left a record behind");
+});
+
+test("a key an earlier build left in chrome.storage.local is moved out of the reader's reach", async (t) => {
+  const idb = fakeIndexedDB();
+  globalThis.indexedDB = idb;
+  t.after(() => { delete globalThis.indexedDB; });
+  const area = (initial) => {
+    const data = { ...initial };
+    return {
+      data,
+      get: async (key) => ({ [key]: data[key] }),
+      remove: async (key) => { delete data[key]; },
+    };
+  };
+
+  const local = area({ [LEGACY_LOCAL_KEY]: ` ${FAKE_KEY} `, positions: { kept: true } });
+  await moveLegacyKey(local);
+  assert.equal(await readKey(), FAKE_KEY);
+  assert.deepEqual(local.data, { positions: { kept: true } }, "the old copy is still readable by the reader");
+
+  // A key saved since wins over an old one, and the old one still goes.
+  await saveKey("newer-test-key-not-real");
+  const again = area({ [LEGACY_LOCAL_KEY]: FAKE_KEY });
+  await moveLegacyKey(again);
+  assert.equal(await readKey(), "newer-test-key-not-real");
+  assert.deepEqual(again.data, {});
+
+  await moveLegacyKey(area({}));
+  assert.equal(await readKey(), "newer-test-key-not-real", "nothing to move wiped the key");
+});
+
+test("only the options page and the worker touch the key; the reader cannot", () => {
+  const read = (file) => fs.readFileSync(path.join(here, "../src", file), "utf8");
+  const readerFiles = fs.readdirSync(path.join(here, "../src/reader")).filter((f) => f.endsWith(".js"));
+  for (const file of readerFiles) {
+    const source = read(`reader/${file}`);
+    assert.ok(!/from\s+["'][^"']*keystore|indexedDB\.|["']elevenKey["']|["']xi-api-key["']/.test(source),
+              `src/reader/${file} reaches for the key`);
+  }
+  for (const file of ["background.js", "options.js"]) {
+    const source = read(file);
+    assert.ok(!/elevenKey|KEY_STORAGE/.test(source), `${file} keeps the key outside keystore.js`);
+    assert.ok(!/console\.[a-z]+\([^)]*key/i.test(source), `${file} logs something about the key`);
+  }
+  const manifest = JSON.parse(fs.readFileSync(path.join(here, "../manifest.json"), "utf8"));
+  assert.equal(manifest.host_permissions, undefined, "ElevenLabs allows any origin; no host permission is needed");
+  assert.ok(!JSON.stringify(manifest.web_accessible_resources).includes("keystore"), "keystore.js is web-accessible");
+  assert.equal(manifest.options_ui?.page, "src/options.html");
+  assert.ok(!/<script(?![^>]*\ssrc=)[^>]*>/i.test(read("options.html")), "inline script on the options page");
+});
+
+test("choosing the voice again after a failure asks once more; what worked is kept", async () => {
+  const worker = fakeWorker();
+  const { n, context } = narrator(worker);
+  const messages = [];
+  n.speak("Good card.", { voice: "eleven:woman" });
+  await wait(300);
+  worker.answer();
+  await wait(20);
+  n.speak("Bad card.", { voice: "eleven:woman" }, null, (m) => messages.push(m));
+  await wait(300);
+  worker.fail(MESSAGES.needsPaidPlan);
+  await wait(20);
+  assert.deepEqual(messages, [MESSAGES.needsPaidPlan]);
+
+  n.forgetFailures();
+  n.speak("Bad card.", { voice: "eleven:woman" }, null, (m) => messages.push(m));
+  await wait(300);
+  assert.deepEqual(worker.sent.map((m) => m.text), ["Good card.", "Bad card.", "Bad card."]);
+  worker.answer();
+  await wait(20);
+  n.speak("Good card.", { voice: "eleven:woman" });
+  await wait(20);
+  assert.equal(worker.sent.length, 3, "paid again for a card that had worked");
+  assert.deepEqual(context.played, ["Good card.", "Bad card.", "Good card."]);
+  n.close();
 });

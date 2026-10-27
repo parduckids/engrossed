@@ -2,8 +2,9 @@
 //
 // Pure logic, no chrome.* anywhere, so the node tests can import it. The
 // service worker is the only place that makes a request, and the options page
-// is the only place a key is typed. The reader on the page never sees the key:
-// it sends the card's text to the service worker and gets audio back.
+// is the only place a key is typed. The reader on the page never sees the key
+// and cannot read where it is kept: it sends the card's text to the service
+// worker and gets audio back.
 //
 // Both voice ids live here and nowhere else. They are permanent library voices,
 // which need a paid ElevenLabs plan.
@@ -19,8 +20,9 @@ export const VOICES = Object.freeze({
 export const VOICE_PREFIX = "eleven:";
 export const DEFAULT_VOICE = "woman";
 
-// chrome.storage.local, never sync: sync leaves the device.
-export const KEY_STORAGE = "elevenKey";
+// The key itself is kept by src/keystore.js, in the extension's own IndexedDB:
+// never chrome.storage, which the reader on the page can read, and never sync,
+// which leaves the device.
 
 // Flash, not multilingual_v2: flash reads Hungarian, multilingual_v2 does not.
 export const MODEL_ID = "eleven_flash_v2_5";

@@ -1,6 +1,6 @@
 {
   "name": "engrossed-web",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Engrossed for the web - read any article in small, focused cards.",
   "type": "module",

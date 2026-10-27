@@ -86,7 +86,7 @@ Shows the reader on that tab after the user clicks the button. Nothing is inject
 
 **storage**
 ```
-Saves the reader's place in each article and their reading preferences on their own computer. If the user adds their own ElevenLabs key, it is stored here too, on that computer only.
+Saves the reader's place in each article and their reading preferences on their own computer.
 ```
 
 **Host permissions**: none requested.

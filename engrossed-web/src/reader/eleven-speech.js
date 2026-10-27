@@ -2,15 +2,17 @@
 //
 // This runs inside the reader on someone else's page, so it never holds the
 // key. It sends the card's text to the service worker, which reads the key from
-// chrome.storage.local and makes the request, and it gets the MP3 back as
-// base64. Nothing here touches chrome.* until a method is called.
+// the extension's own IndexedDB (src/keystore.js) and makes the request, and it
+// gets the MP3 back as base64. Nothing here touches chrome.* until a method is
+// called.
 //
 // Playback is Web Audio rather than an <audio> element. A page's media-src CSP
 // can block blob: and data: URLs; Web Audio is not governed by it.
 //
 // Billing: one request per card spoken, and at most one card fetched ahead.
 // Every answer is kept (about twenty cards), so Back and "Read it again" do
-// not pay twice, and a failure is kept too, so nothing is ever asked twice.
+// not pay twice, and a failure is kept too, so nothing is asked twice unless
+// the reader deliberately chooses the voice again.
 
 // The same words as MESSAGES.unreachable in src/eleven.js, which the reader
 // cannot import: it is not web-accessible, and does not need to be.
@@ -95,6 +97,8 @@ export class ElevenNarrator {
     this.timer = null;
     this.prefetchTimer = null;
     this.cache = new Map();
+    // The cached answers that were failures, so a deliberate retry can drop them.
+    this.failures = new Map();
   }
 
   // Called from the Listen click. Chrome only lets an AudioContext start in
@@ -175,6 +179,7 @@ export class ElevenNarrator {
   close() {
     this.stop();
     this.cache.clear();
+    this.failures.clear();
     const context = this.context;
     this.context = null;
     try { Promise.resolve(context?.close()).catch(() => {}); } catch { /* ignore */ }
@@ -207,9 +212,20 @@ export class ElevenNarrator {
       () => ({ ok: false, message: UNREACHABLE }),
     ).catch(() => ({ ok: false, message: UNREACHABLE }));
 
+    result.then((answer) => { if (!answer.ok) this.failures.set(key, result); });
     this.cache.set(key, result);
     while (this.cache.size > CACHE_SIZE) this.cache.delete(this.cache.keys().next().value);
     return result;
+  }
+
+  // The reader chose an ElevenLabs voice again after a failure. Its failed
+  // cards are forgotten, so each can be asked for once more. Answers that
+  // worked are kept: those are already paid for.
+  forgetFailures() {
+    for (const [key, result] of this.failures) {
+      if (this.cache.get(key) === result) this.cache.delete(key);
+    }
+    this.failures.clear();
   }
 
   async decode(bytes) {

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Engrossed",
-  "version": "0.1.0",
-  "description": "Read any article one small card at a time, with your place saved. For anyone who loses the thread on a wall of text.",
+  "version": "1.0.0",
+  "description": "Shows long articles a few sentences at a time, so you stay focused and never lose your place.",
   "permissions": ["activeTab", "storage", "scripting"],
   "action": {
     "default_title": "Read this page in Engrossed",

@@ -279,8 +279,12 @@ button.quiet:hover { background: rgb(var(--ink) / 0.07); }
   padding: 28px;
   display: flex;
   flex-direction: column;
+  /* A column down the middle rather than a list hugging the left edge of a
+     wide window, which reads as unfinished. */
+  align-items: center;
   gap: 24px;
 }
+.sheet > * { width: min(100%, 40rem); }
 .sheet h2 {
   font-size: 22px;
   font-weight: 600;

@@ -374,8 +374,10 @@ function speakCurrent() {
     continueListening,
     (message) => {
       // Never stuck, never silent: this card goes to the built-in voice, and so
-      // does the rest of the session. The message is shown once.
-      if (!state?.listening || state.chunks[state.index] !== current) return;
+      // does the rest of the session. The message is shown once. A move or a
+      // stop has already dropped this callback (the narrator's token), so the
+      // only check needed is that the reader is still open and listening.
+      if (!state?.listening) return;
       state.elevenFailed = true;
       state.elevenNotice = message || "";
       refreshFooter();
@@ -439,8 +441,14 @@ function onSyncChanged(changes) {
   // Just picked in this reader: what arrives now is the echo of an older save.
   if (Date.now() - state.voicePickedAt < 2000) return;
   state.settings.voiceURI = voiceURI;
+  // A voice chosen on purpose, often with a new key: ElevenLabs gets another
+  // go, as it does when the voice is chosen again in this reader.
+  state.elevenFailed = false;
+  state.elevenNotice = "";
+  state.elevenNarrator.forgetFailures();
   refreshEleven();
   if (state.overlay === "settings") render();
+  else refreshFooter();
 }
 
 // ---------- sprints ----------
@@ -982,9 +990,11 @@ function settingsSheet() {
         state.voicePickedAt = Date.now();
         if (elevenChoices.some((v) => v.uri === value)) {
           // Choosing it again is a deliberate retry after a failure, and this
-          // change is the user gesture Web Audio needs.
+          // change is the user gesture Web Audio needs. The card that failed
+          // is asked for once more, rather than failing again from the cache.
           state.elevenFailed = false;
           state.elevenNotice = "";
+          state.elevenNarrator.forgetFailures();
           state.elevenNarrator.unlock();
         }
         change({ voiceURI: value });
@@ -1008,7 +1018,7 @@ function settingsSheet() {
       elevenChoices.length
         ? el("div", {
             class: "caption",
-            text: "While an ElevenLabs voice is reading, the text of each card is sent to ElevenLabs with your key.",
+            text: "While an ElevenLabs voice is reading, the text of each card is sent to ElevenLabs with your key. Nothing else is sent.",
           })
         : null,
       elevenButton(),

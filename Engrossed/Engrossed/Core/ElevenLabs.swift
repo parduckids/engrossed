@@ -193,6 +193,10 @@ enum ElevenLabs {
     /// `Failure` (or as the cancellation it was) and the caller falls back.
     static func audio(for line: Line, apiKey: String,
                       session: URLSession = ElevenLabs.session) async throws -> Data {
+        // A request let go before it went out is never sent at all, rather
+        // than started and cancelled a moment later, by which time ElevenLabs
+        // may already have begun on it.
+        try Task.checkCancellation()
         guard let request = request(for: line, apiKey: apiKey) else {
             throw Failure.unreachable
         }
