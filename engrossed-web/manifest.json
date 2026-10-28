@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Engrossed",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shows long articles a few sentences at a time, so you stay focused and never lose your place.",
   "permissions": ["activeTab", "storage", "scripting"],
   "action": {

@@ -31,7 +31,7 @@ Engrossed shows an article a few sentences at a time, with nothing else on the s
 
 Close it whenever you like. Your place is saved for every article, so tomorrow you carry on from the same sentence.
 
-Made for anyone whose mind wanders while reading, including people with ADHD and autistic readers. It brings the reading mode of the Engrossed app for iPhone, iPad and Mac to the web.
+Made for anyone whose mind wanders while reading, including people with ADHD and autistic readers.
 
 WHAT IT DOES
 • A few sentences at a time, with the last words of the previous ones faded above, so you never lose the thread.
@@ -46,7 +46,7 @@ WHAT IT DOES
 PRIVATE BY DESIGN
 Engrossed only runs when you click its button, and only on that tab. It has no account, no servers and no analytics, and your reading positions stay on your computer. Chrome shows no "read your data on all websites" warning when you install it, because it doesn't ask for that.
 
-Works on blog posts, news, documentation and Wikipedia. Chrome doesn't allow extensions on its own pages or in its PDF viewer. For PDFs and books, there is the Engrossed app.
+Works on blog posts, news, documentation and Wikipedia. Chrome doesn't allow extensions on its own pages or in its PDF viewer. For PDFs and ebooks, an Engrossed app for iPhone, iPad and Mac is coming soon.
 ```
 
 ### Category
