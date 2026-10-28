@@ -805,7 +805,7 @@ function footer() {
       }),
     ]),
     el("div", { class: "progress" }, [
-      el("div", { class: "counter", text: `${within} of ${total} in this stretch` }),
+      el("div", { class: "counter", text: `${within} of ${total} in this part` }),
       dots,
     ]),
     el("div", { class: "bar-track" }, [
@@ -819,7 +819,7 @@ function footer() {
 function checkpointPanel() {
   return el("div", { class: "panel" }, [
     el("div", { class: "inner" }, [
-      el("div", { class: "label", text: "END OF A STRETCH" }),
+      el("div", { class: "label", text: "QUICK CHECK-IN" }),
       el("div", { class: "question", text: "In one line, what was that about?" }),
       el("div", {
         class: "body",

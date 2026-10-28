@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Engrossed",
   "version": "1.0.1",
-  "description": "Shows long articles a few sentences at a time, so you stay focused and never lose your place.",
+  "description": "Shows long articles a few sentences at a time, so it's easier to stay focused. Saves your place. Made with ADHD readers in mind.",
   "permissions": ["activeTab", "storage", "scripting"],
   "action": {
     "default_title": "Read this page in Engrossed",

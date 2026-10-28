@@ -165,8 +165,9 @@ function isStranded(segment) {
   const tokens = trimmed.split(/\s+/);
   const last = tokens[tokens.length - 1].replace(/^[("'‘“]+/, "");
   const bare = last.slice(0, -1).toLowerCase();
-  // A single letter is an initial: "J. R. R. Tolkien".
-  return ABBREVIATIONS.has(bare) || /^\p{L}$/u.test(bare);
+  // A single letter is an initial: "J. R. R. Tolkien". Dotted letters are an
+  // abbreviation too: "U.S.", "D.C.", "U.K.", "e.g.", "i.e.", "a.m.", "p.m.".
+  return ABBREVIATIONS.has(bare) || /^\p{L}$/u.test(bare) || /^(\p{L}\.)+\p{L}$/u.test(bare);
 }
 
 const segmenters = new Map();

@@ -161,3 +161,13 @@ test("empty and degenerate input does not throw", () => {
   assert.deepEqual(assignSections([]), []);
   assert.deepEqual(chunk([para("   ")]).chunks, []);
 });
+
+test("does not split after a dotted abbreviation such as U.S.", () => {
+  const text = "The bill reached the floor of the U.S. Senate on Tuesday, where it passed.";
+  assert.deepEqual(splitSentences(text), [text]);
+  for (const abbreviation of ["D.C.", "U.K.", "e.g.", "i.e.", "a.m.", "p.m."]) {
+    const sentence = `They met at 9 ${abbreviation} Then they left.`;
+    assert.equal(splitSentences(sentence).length, 1, abbreviation);
+  }
+  assert.equal(splitSentences("Stop. Think about it. Then act.").length, 3);
+});
