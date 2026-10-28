@@ -20,14 +20,14 @@ Alternatives:
 Read web articles a few sentences at a time: Engrossed, a free Chrome extension
 ```
 ```
-Stay with long articles and never lose your place | Free Chrome extension
+Stay with long articles and keep your place | Free Chrome extension
 ```
 
 ## Description
 ```
 Long articles are hard to stay with. Engrossed is a free Chrome extension that shows a web article a few sentences at a time, with nothing else on the screen. Click, or press Space, for the next few. Or read the whole article as one page, with everything except your place dimmed.
 
-Your place is saved in every article, so you can close it and carry on later from the same sentence. Longer articles have a short check-in at the end of each part, where you say in one line what you just read. There is also an optional reading timer, a list of the article's sections, read aloud, and four themes: Paper, Sepia, Slate and Night.
+Your place is saved in every article, so you can close it and pick up where you left off. Longer articles have a short check-in at the end of each part, where you say in one line what you just read. There is also a reading timer you can change or turn off, a list of the article's sections, read aloud, and four themes: Paper, Sepia, Slate and Night.
 
 It is free, with no account and no tracking, and it only runs when you click its button. Made with ADHD and autistic readers in mind.
 
