@@ -25,7 +25,7 @@ struct PaywallView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 9) {
-                    Text("Room for a shelf")
+                    Text("Room for more books")
                         .font(.system(size: 27, weight: .semibold, design: .serif))
                         .foregroundStyle(theme.ink)
 
