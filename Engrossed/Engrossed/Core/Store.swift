@@ -137,7 +137,7 @@ final class Store {
             case .pending:
                 // Ask to Buy, or a payment awaiting approval. The listener
                 // above will pick it up whenever it clears.
-                purchaseError = "Waiting for approval. The full shelf is yours as soon as it comes through."
+                purchaseError = "Waiting for approval. You can add more books as soon as it comes through."
             @unknown default:
                 break
             }

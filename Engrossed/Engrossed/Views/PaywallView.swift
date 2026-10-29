@@ -103,9 +103,9 @@ struct PaywallView: View {
                 if store.isPurchasing {
                     ProgressView().controlSize(.small).tint(.white)
                 } else if let price = store.displayPrice {
-                    Text("Get the full shelf \u{00B7} \(price)")
+                    Text("All yours, forever \u{00B7} \(price)")
                 } else {
-                    Text("Get the full shelf")
+                    Text("All yours, forever")
                 }
             }
             .frame(maxWidth: .infinity)
