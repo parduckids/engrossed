@@ -66,11 +66,6 @@ English
 | Small promo tile | 440 × 280 | `store/promo-440x280.png` |
 | Marquee (optional) | 1400 × 560 | `store/marquee-1400x560.png` |
 
-### Promo video
-The store takes a YouTube link, not a file. Upload `store/promo-video.mp4` to YouTube with the
-title and description in `store/YOUTUBE.md`, then paste the video's address into the
-"YouTube video" field on this tab.
-
 ---
 
 ## Privacy practices tab
