@@ -53,7 +53,7 @@ struct LaunchView: View {
                 }
 
                 Text("Engrossed")
-                    .font(.system(size: size * 0.085, weight: .semibold, design: .serif))
+                    .font(.custom("InstrumentSerif-Regular", size: size * 0.13))
                     .foregroundStyle(cream)
                     .opacity(wordIn ? 1 : 0)
                     .offset(y: mark * 0.62 + (wordIn ? 0 : 10))

@@ -107,7 +107,7 @@ struct LibraryView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Engrossed")
-                    .font(.system(size: 30, weight: .semibold, design: .serif))
+                    .font(.custom("InstrumentSerif-Regular", size: 40, relativeTo: .largeTitle))
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)

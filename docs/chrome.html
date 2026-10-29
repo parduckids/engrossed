@@ -10,6 +10,7 @@
     @media (prefers-color-scheme: dark) {
       :root { --paper: #121214; --ink: #dedbd6; --faint: #dedbd6a6; --accent: #de9985; --accent-fill: #de9985; --on-accent: #1a1a1c; --tile: #dedbd60f; }
     }
+    @font-face { font-family: "Instrument Serif"; src: url("fonts/InstrumentSerif-Regular.ttf") format("truetype"); font-display: swap; }
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 64px 20px 80px;
@@ -18,7 +19,7 @@
       -webkit-font-smoothing: antialiased;
     }
     main { max-width: 44rem; margin: 0 auto; }
-    h1 { font-size: 40px; line-height: 1.1; margin: 0 0 10px; }
+    h1 { font-family: "Instrument Serif", ui-serif, Georgia, serif; font-weight: 400; font-size: 52px; line-height: 1.1; margin: 0 0 10px; }
     .lede { font-size: 21px; margin: 0 0 28px; }
     .shot { width: 100%; height: auto; border-radius: 12px; display: block;
             box-shadow: 0 1px 2px #0000000f, 0 12px 40px #0000001f; margin: 8px 0 32px; }

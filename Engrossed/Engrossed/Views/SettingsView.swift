@@ -174,7 +174,7 @@ struct SettingsForm: View {
                 // the computer the reader will use it on.
                 group("Also for Chrome") {
                     #if os(iOS)
-                    caption("On your computer, Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved. It’s free.")
+                    caption("Engrossed for Chrome is out now, free on the Chrome Web Store. On your computer it does the same for web articles: a few sentences at a time, with your place saved.")
                     ShareLink(item: Self.chromeStore,
                               subject: Text("Engrossed for Chrome"),
                               message: Text("Engrossed for Chrome, free: long articles a few sentences at a time.")) {
@@ -186,7 +186,7 @@ struct SettingsForm: View {
                         .font(.system(size: 13, design: .rounded))
                         .foregroundStyle(theme.faint)
                     #else
-                    caption("Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved. It’s free.")
+                    caption("Engrossed for Chrome is out now, free on the Chrome Web Store. It does the same for web articles: a few sentences at a time, with your place saved.")
                     Link("Add to Chrome, free", destination: Self.chromeStore)
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(theme.accent)

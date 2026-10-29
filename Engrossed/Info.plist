@@ -32,6 +32,15 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
+	<!-- The wordmark font, Instrument Serif (SIL Open Font License; the
+	     licence ships beside it as InstrumentSerif-OFL.txt). UIAppFonts is
+	     iOS; ATSApplicationFontsPath is the Mac, relative to Resources. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>InstrumentSerif-Regular.ttf</string>
+	</array>
+	<key>ATSApplicationFontsPath</key>
+	<string>.</string>
 	<key>UISupportsDocumentBrowser</key>
 	<false/>
 	<!-- The app uses no encryption of its own. StoreKit, and the optional
