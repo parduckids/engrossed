@@ -36,7 +36,7 @@ Made for anyone whose mind wanders while reading, and built with ADHD and autist
 WHAT IT DOES
 • A few sentences at a time, with the last words of the previous ones faded above, to help you keep the thread.
 • Or the whole article as one page, with everything except the part you're reading dimmed.
-• In longer articles, a pause every few hundred words to say in one line what you just read. If nothing comes, you know to reread it now rather than twenty pages later.
+• In longer articles, a pause every few hundred words to say in one line what you just read. If nothing comes, "Remind me" shows how each paragraph began, or you can read that part again.
 • A 20-minute reading timer, then a reminder to take a break. You can change the length or turn it off.
 • A list of the article's sections, to jump straight to the one you want.
 • Read aloud with the voices built into Chrome. It moves on by itself and pauses at each check-in. If you have a paid ElevenLabs plan, you can paste your own key for more natural voices.

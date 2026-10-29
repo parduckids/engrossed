@@ -26,6 +26,7 @@ import { Narrator, speechAvailable, voicesFor } from "./speech.js";
 import {
   ElevenNarrator, elevenStatus, openElevenOptions, isSpoken, nextSpokenIndex,
 } from "./eleven-speech.js";
+import * as recap from "./recap.js";
 
 const HOST_ID = "engrossed-root";
 // Below this many sections a checkpoint is friction rather than help: a short
@@ -142,6 +143,12 @@ export async function open() {
     sprint: null,
     sprintUserPaused: false,
     sprintSaveCount: 0,
+    // The check-in on screen: { section, shownAt, first, again, hint, remind }.
+    checkIn: null,
+    checkInsShown: 0,
+    // The part "Read it again" sent the reader back to, so its check-in can
+    // say so when they reach it a second time.
+    rereadSection: null,
   };
 
   // If the page tears its own DOM down, put ourselves back rather than
@@ -253,6 +260,15 @@ function advance() {
   const section = sectionOf(index);
   if (checkpointsOn() && section && index === section.lastChunk) {
     stopSpeech({ keepListening: true });
+    state.checkIn = {
+      section,
+      shownAt: performance.now(),
+      first: state.checkInsShown === 0,
+      again: state.rereadSection === section.id,
+      hint: false,
+      remind: false,
+    };
+    state.checkInsShown += 1;
     state.overlay = "checkpoint";
     render();
     return true;
@@ -310,8 +326,21 @@ function onKey(event) {
   // Never swallow keys while the reader is typing or choosing in a control.
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
 
-  if (state.overlay === "checkpoint" && (key === " " || key === "Enter")) {
-    handled(); keepGoing(); return;
+  if (state.overlay === "checkpoint" && state.checkIn) {
+    const target = event.composedPath()[0];
+    const action = recap.checkInKey(key, {
+      repeat: event.repeat,
+      shownFor: performance.now() - state.checkIn.shownAt,
+      // The check-in's own buttons only. The reader's buttons are still
+      // there underneath it, hidden, and pressing one blind would be baffling.
+      onButton: target instanceof HTMLElement && target.tagName === "BUTTON" &&
+                Boolean(target.closest(".panel")),
+    });
+    if (action === "continue") { handled(); keepGoing(); }
+    else if (action === "native") event.stopImmediatePropagation();
+    else if (action === "hint") { handled(); showCheckInHint(); }
+    else if (action === "ignore") handled();
+    return;
   }
   if (state.overlay) return;
 
@@ -507,13 +536,23 @@ function updatePill() {
 
 function keepGoing() {
   state.overlay = null;
+  state.checkIn = null;
+  state.rereadSection = null;
   step(state.index + 1, { rerender: true });
 }
 
 function readAgain() {
   const section = sectionOf(state.index);
   state.overlay = null;
+  state.checkIn = null;
+  state.rereadSection = section ? section.id : null;
   step(section ? section.firstChunk : state.index, { credit: false, rerender: true });
+}
+
+function showCheckInHint() {
+  if (!state.checkIn || state.checkIn.hint) return;
+  state.checkIn.hint = true;
+  render();
 }
 
 // ---------- rendering ----------
@@ -545,6 +584,11 @@ function render() {
     root.appendChild(state.footerEl);
   }
 
+  // The check-in and the break cover the whole reader. Make what is under them
+  // unreachable, so Tab can't land on a button nobody can see.
+  if (state.overlay === "checkpoint" || state.overlay === "break") {
+    for (const node of root.children) node.inert = true;
+  }
   if (state.overlay === "settings") root.appendChild(settingsSheet());
   if (state.overlay === "contents") root.appendChild(contentsSheet());
   if (state.overlay === "checkpoint") root.appendChild(checkpointPanel());
@@ -627,9 +671,9 @@ function cardBody(chunk) {
     ]);
   }
   if (chunk.kind === "figure") {
-    const figure = el("figure", { class: "card figure" }, [
-      el("img", { src: chunk.figure.src, alt: chunk.figure.alt, loading: "lazy" }),
-    ]);
+    const img = el("img", { src: chunk.figure.src, alt: chunk.figure.alt, loading: "lazy" });
+    img.addEventListener("load", () => fitFigure(img), { once: true });
+    const figure = el("figure", { class: "card figure" }, [img]);
     const caption = chunk.figure.caption || chunk.figure.alt;
     if (caption) figure.appendChild(el("figcaption", { text: caption }));
     return figure;
@@ -672,6 +716,16 @@ function cardsView() {
 }
 
 // ---------- flow ----------
+
+// A picture is shown as wide as the reading column, as Chrome's own reading
+// mode does, but never taller than most of the screen. A small one stays its
+// own size: an icon or a little diagram blown up to full width looks broken.
+function fitFigure(img) {
+  const { naturalWidth: width, naturalHeight: height } = img;
+  if (!width || !height) return;
+  img.style.setProperty("--ratio", String(width / height));
+  if (width >= 300) img.classList.add("fill");
+}
 
 function flowView() {
   const total = state.chunks.length;
@@ -817,19 +871,28 @@ function footer() {
 // ---------- panels ----------
 
 function checkpointPanel() {
+  const check = state.checkIn;
+  const section = check?.section || sectionOf(state.index);
+  const heading = section ? recap.headingFor(state.chunks, section) : null;
+  const lines = section ? recap.openingLines(state.chunks, section) : [];
+  const body = check?.again ? recap.AGAIN_BODY : check?.first === false ? recap.SHORT_BODY : recap.FIRST_BODY;
+
   return el("div", { class: "panel" }, [
     el("div", { class: "inner" }, [
       el("div", { class: "label", text: "QUICK CHECK-IN" }),
-      el("div", { class: "question", text: "In one line, what was that about?" }),
-      el("div", {
-        class: "body",
-        text: "Don’t write it down. Just say it to yourself. If nothing comes, that’s the useful part. " +
-              "It means the last few minutes didn’t land, and it’s cheaper to re-read now than to find out in twenty pages.",
-      }),
+      el("div", { class: "question", text: section ? recap.questionFor(section, heading) : recap.QUESTIONS[0] }),
+      el("div", { class: "body", text: body }),
+      check?.remind && lines.length ? el("ul", { class: "recap" }, lines.map((line) => el("li", { text: line }))) : null,
       el("div", { class: "actions" }, [
         el("button", { class: "prominent", text: "Got it, keep going", onclick: keepGoing }),
         el("button", { text: "Read it again", onclick: readAgain }),
+        !check?.remind && lines.length ? el("button", {
+          class: "quiet", text: "Remind me",
+          onclick: () => { if (state.checkIn) { state.checkIn.remind = true; render(); } },
+        }) : null,
       ]),
+      check?.hint ? el("div", { class: "hint", text: "Press Enter when you’re ready." }) : null,
+      section ? el("div", { class: "tally", text: recap.tallyFor(section) }) : null,
     ]),
   ]);
 }
@@ -1051,8 +1114,8 @@ function settingsSheet() {
     ]),
     el("div", { class: "group" }, [
       el("div", { class: "label", text: "FOCUS" }),
-      toggle("Checkpoint at the end of each stretch", "checkpoints",
-             "A one-line recap prompt. Only on longer articles, three stretches or more."),
+      toggle("Quick check-in at the end of each part", "checkpoints",
+             "Asks what you just read, in one line. Only on longer articles, three parts or more."),
       toggle("Back up one card when you come back", "rewindOnResume", null),
     ]),
     el("div", { class: "group" }, [

@@ -179,13 +179,15 @@ struct RootView: View {
                 SettingsView().environment(settings).environment(library)
             case "paywall":
                 PaywallView().environment(settings)
+            case "checkin":
+                CheckpointView.debugSample(settings: settings) { debugSheet = false }
             default:
                 EmptyView()
             }
         }
         // Only the screens that really are sheets. "tour" is not one, and
         // presenting an empty sheet for it covered the entire app in white.
-        .onAppear { debugSheet = ["settings", "paywall"].contains(debugScreen ?? "") }
+        .onAppear { debugSheet = ["settings", "paywall", "checkin"].contains(debugScreen ?? "") }
         #endif
         // The library owns the gate but not the entitlement, so the two are
         // kept in step here rather than having the data layer reach into

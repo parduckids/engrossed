@@ -194,6 +194,10 @@ button.quiet:hover { background: rgb(var(--ink) / 0.07); }
   border-radius: 10px;
   display: block;
 }
+.card.figure img.fill {
+  width: min(100%, calc(60vh * var(--ratio)));
+  height: auto;
+}
 .card.figure figcaption {
   margin-top: 10px;
   font-size: calc(var(--size) * 0.7px);
@@ -406,6 +410,42 @@ button.listening { color: rgb(var(--accent)); }
   color: rgb(var(--ink) / 0.6);
 }
 .panel .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.panel .recap {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.panel .recap li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgb(var(--ink) / 0.6);
+}
+.panel .recap li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgb(var(--accent) / 0.4);
+}
+.panel .hint {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 13px;
+  color: rgb(var(--accent));
+}
+.panel .tally {
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 11px;
+  color: rgb(var(--ink) / 0.35);
+  margin-top: 6px;
+}
 
 /* ---------- contents ---------- */
 

@@ -83,8 +83,13 @@ plain ES modules.
 ## What it does
 
 - **Cards** and **Flow**, matching the app. In Flow, scrolling saves your place.
-- **Checkpoints**: at the end of each stretch, "In one line, what was that about?"
-  Only on articles with three stretches or more; on a short piece it is friction.
+- **Check-ins**: at the end of each part, a one-line question about it. It names
+  the section when most of the part sits under one heading, and otherwise rotates
+  a few plain questions. "Remind me" lists how each paragraph opened. Space and
+  the other next keys never close it, and Enter only does after a second, so
+  tapping through the cards can't skip it. Only on articles with three parts or
+  more; on a short piece it is friction. The rules are in `src/reader/recap.js`
+  and match the app's `Core/Recap.swift`.
 - **Rewind on resume**: coming back backs up one card so you land in context. The
   real place is what gets saved, so a visit never quietly costs you a card.
 - **Sprints**: a countdown in the top bar (click to pause), then a break. A sprint

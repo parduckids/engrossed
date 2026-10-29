@@ -96,11 +96,7 @@ struct SettingsForm: View {
 
                 group("Focus") {
                     toggle("Ask me what I just read", $settings.checkpointsEnabled,
-                           note: "A one-line recall prompt at the end of each stretch. The best-supported thing in this app. It closed the comprehension gap for ADHD readers in a controlled study.")
-
-                    Text("A better recap is coming.")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(theme.ink.opacity(0.3))
+                           note: "A one-line recall prompt at the end of each part. The best-supported thing in this app. It closed the comprehension gap for ADHD readers in a controlled study.")
 
                     toggle("Open straight into my book", $settings.openLastBookOnLaunch,
                            note: "Skips the shelf on launch and puts you back on the card you left. The shelf is one tap away.")
@@ -109,7 +105,7 @@ struct SettingsForm: View {
                            note: "Reopening drops you one card earlier, so you land inside the thought instead of at a cold edge.")
 
                     toggle("Hide overall progress", $settings.hideTotalProgress,
-                           note: "Shows only where you are in the current stretch. \u{201C}4 of 11\u{201D} is finishable; \u{201C}3% of 200 pages\u{201D} is not.")
+                           note: "Shows only where you are in the current part. \u{201C}4 of 11\u{201D} is finishable; \u{201C}3% of 200 pages\u{201D} is not.")
                 }
 
                 group("Sprints") {

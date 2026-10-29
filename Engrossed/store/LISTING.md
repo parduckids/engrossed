@@ -2,17 +2,21 @@
 
 Everything here is a draft to paste into App Store Connect. Character limits are Apple's.
 
-> **Check the name first.** Search the App Store for "Engrossed" before you commit to it. App
-> names are first come, first served, and you reserve it by creating the app record in App Store
-> Connect. If it is taken, "Engrossed Reader" is the obvious fallback.
+> **Reserve the name first.** App names are first come, first served, and you reserve one by
+> creating the app record in App Store Connect. "Reader" is in the name on purpose: there is an
+> unrelated focus-timer app called "Engross", and the name makes clear this is a different kind
+> of app. Keep "Engross", "focus timer", "Pomodoro" and "to-do" out of the name, subtitle and
+> keywords. The home screen still just says "Engrossed".
 
 ---
 
 ## Name (30 max)
 
 ```
-Engrossed
+Engrossed: PDF & EPUB Reader
 ```
+
+28 characters.
 
 ## Subtitle (30 max)
 
@@ -32,10 +36,10 @@ A page of text gives your eyes a hundred places to land. Engrossed gives them on
 ## Keywords (100 max, comma separated, no spaces after commas)
 
 ```
-pdf,epub,reader,adhd,autism,attention,reading,study,textbook,dyslexia,neurodivergent,calm,ebook
+adhd,autism,attention,reading,study,textbook,dyslexia,neurodivergent,calm,ebook,books,papers
 ```
 
-That is 95 characters. "focus" is left out because the subtitle already has it. Do not repeat words already in the name or subtitle, Apple indexes those
+That is 92 characters. "pdf", "epub" and "reader" are left out because the name has them, and "focus" because the subtitle does. Do not repeat words already in the name or subtitle, Apple indexes those
 separately. Do not put competitor names in here, Apple rejects for it.
 
 ## Description (4000 max)
@@ -62,8 +66,9 @@ land inside the thought instead of at a cold edge.
 Three ways to read. Cards, a few sentences at a time. Flow, continuous text with everything but your current
 spot dimmed. Pace, a word at a time at a speed you set.
 
-Checkpoints. At the end of each stretch it asks what you just read. If nothing comes to mind,
-that is worth knowing now rather than twenty pages later.
+Check-ins. At the end of each part it asks what you just read, about that section by name when
+it can. If nothing comes to mind, that is worth knowing now rather than twenty pages later, and
+"Remind me" shows how each paragraph began.
 
 Sprints. A bounded session with a visible end, and a real break when it finishes.
 

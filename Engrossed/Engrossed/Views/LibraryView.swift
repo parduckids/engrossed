@@ -249,7 +249,7 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 9) {
                 bullet("It gets cut into small cards of whole sentences, never a wall of text.")
                 bullet("Your place is saved constantly. Close it mid-sentence; it reopens there.")
-                bullet("A stretch takes a few minutes and has a visible end.")
+                bullet("A part takes a few minutes and has a visible end.")
             }
 
             Button { addBook() } label: {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// End of a stretch. A five-second prompt to say what you just read.
+/// End of a part. A five-second prompt to say what you just read.
 ///
 /// This is the one intervention here with strong support behind it: asking
 /// readers to check their own understanding mid-text closed the comprehension
@@ -12,24 +12,36 @@ struct CheckpointView: View {
     let text: BookText
     let settings: ReadingSettings
     let sprint: Sprint
+    /// The first check-in of this read, which explains itself. Later ones
+    /// only say the short version.
+    let isFirst: Bool
+    /// The reader chose “Read it again” on this part and has come back to it.
+    let isSecondTime: Bool
+    /// When a key last reached the reader underneath. Return and Space still
+    /// go there while the check-in is up, so a held key keeps arriving; the
+    /// check-in only arms once they have stopped for a second.
+    let lastKeyAt: Date
     let onContinue: () -> Void
     let onReread: () -> Void
 
     @State private var showRecap = false
+    @State private var armed = false
 
     private var theme: PaperTheme { settings.theme }
 
-    /// The opening clause of each card in the stretch — a skeleton of what was
-    /// covered, not a summary that would let you skip the thinking.
+    private var question: String {
+        Recap.question(for: section, heading: Recap.heading(for: section, in: text))
+    }
+
+    private var bodyText: String {
+        if isSecondTime { return Recap.againBody }
+        return isFirst ? Recap.firstBody : Recap.shortBody
+    }
+
+    /// How each paragraph in the part opened: a skeleton of what was covered,
+    /// not a summary that would let you skip the thinking.
     private var recapLines: [String] {
-        let range = section.firstChunk...section.lastChunk
-        return text.chunks[range]
-            .filter(\.startsParagraph)
-            .prefix(6)
-            .map { chunk in
-                let words = chunk.text.split(separator: " ").prefix(9)
-                return words.joined(separator: " ") + "\u{2026}"
-            }
+        Recap.openingLines(for: section, in: text)
     }
 
     var body: some View {
@@ -39,14 +51,14 @@ struct CheckpointView: View {
             theme.background.ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 22) {
-                QuietLabel(text: "END OF A STRETCH", theme: theme)
+                QuietLabel(text: "QUICK CHECK-IN", theme: theme)
 
-                Text("In one line, what was that about?")
+                Text(question)
                     .font(.system(size: 26, weight: .medium, design: .serif))
                     .foregroundStyle(theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Don’t write it down. Just say it to yourself. If nothing comes, that’s the useful part. It means the last few minutes didn’t land, and it’s cheaper to re-read now than to find out in twenty pages.")
+                Text(bodyText)
                     .font(.system(size: 14, design: .rounded))
                     .foregroundStyle(theme.ink.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
@@ -85,13 +97,20 @@ struct CheckpointView: View {
             .padding(38)
             .frame(maxWidth: 560, alignment: .leading)
         }
+        .task(id: lastKeyAt) {
+            armed = false
+            try? await Task.sleep(for: Recap.armDelay)
+            if !Task.isCancelled { armed = true }
+        }
     }
 
     @ViewBuilder
     private var choices: some View {
         Button("Got it, keep going") { onContinue() }
             .buttonStyle(SoftButtonStyle(theme: theme, prominent: true))
-            .keyboardShortcut(.return, modifiers: [])
+            // Return turns the cards too, so it only carries on once the
+            // check-in has been up long enough to be read.
+            .keyboardShortcut(armed ? KeyboardShortcut(.return, modifiers: []) : nil)
             .fixedSize()
 
         Button("Read it again") { onReread() }
@@ -109,12 +128,35 @@ struct CheckpointView: View {
         }
     }
 
-    private var tally: String {
-        let words = section.wordCount
-        let minutes = max(1, Int(Double(words) / 220))
-        return "That stretch was about \(words) words \u{00B7} roughly \(minutes) minute\(minutes == 1 ? "" : "s") of reading."
+    private var tally: String { Recap.tally(for: section) }
+}
+
+#if DEBUG
+extension CheckpointView {
+    /// A check-in over a made-up part, for `-debug.screen checkin`. The real
+    /// one is only reached by reading to the end of a part, and the guide is
+    /// shorter than one part.
+    static func debugSample(settings: ReadingSettings, onDone: @escaping () -> Void) -> CheckpointView {
+        let paragraphs = [
+            "Most advice about reading assumes the problem is time. Find a quiet hour and the pages will follow.",
+            "You notice it a page later, when nothing you just read has stayed with you.",
+            "A dense page offers the eye hundreds of places to land, and only one of them is where you are.",
+            "The page also hides your progress. Ten minutes of effort look exactly like none.",
+        ]
+        var chunks = [Chunk(id: 0, text: "Why a full page works against you", page: 0, section: 0,
+                            startsParagraph: true, wordCount: 7, kind: .heading)]
+        for text in paragraphs {
+            chunks.append(Chunk(id: chunks.count, text: text, page: 0, section: 0,
+                                startsParagraph: true, wordCount: Chunker.wordCount(text)))
+        }
+        let section = Section(id: 0, firstChunk: 0, lastChunk: chunks.count - 1,
+                              wordCount: chunks.reduce(0) { $0 + $1.wordCount }, startPage: 0)
+        return CheckpointView(section: section, text: BookText(chunks: chunks, sections: [section]),
+                              settings: settings, sprint: Sprint(), isFirst: true, isSecondTime: false,
+                              lastKeyAt: .now, onContinue: onDone, onReread: onDone)
     }
 }
+#endif
 
 /// The sprint ran out. Stopping on purpose beats grinding to a halt.
 struct BreakView: View {

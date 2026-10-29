@@ -22,7 +22,7 @@ enum TourStep: Int, CaseIterable, Identifiable {
         case .card:
             return "Two or three whole sentences, never cut mid-thought. Tap anywhere to move on, and the arrow at the bottom left takes you back."
         case .progress:
-            return "Your place in this stretch. Small numbers on purpose: four of eleven is finishable, three per cent of two hundred pages is not."
+            return "Your place in this part. Small numbers on purpose: four of eleven is finishable, three per cent of two hundred pages is not."
         case .modes:
             return "Cards, Flow, and Pace. Flow dims everything but your spot. Pace shows one word at a time."
         case .sprint:

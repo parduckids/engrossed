@@ -15,6 +15,13 @@ struct ReaderView: View {
 
     @State private var index: Int = 0
     @State private var showCheckpoint = false
+    /// Check-ins seen this read. Only the first one explains itself.
+    @State private var checkInsShown = 0
+    @State private var checkInIsFirst = true
+    /// The part “Read it again” sent the reader back to, so its check-in can
+    /// say so when they reach it a second time.
+    @State private var rereadSection: Int?
+    @State private var checkInKeyAt = Date()
     @State private var showBreak = false
     @State private var showSettings = false
     @State private var showContents = false
@@ -184,8 +191,19 @@ struct ReaderView: View {
                                text: text,
                                settings: settings,
                                sprint: sprint,
-                               onContinue: { showCheckpoint = false; step(to: index + 1) },
-                               onReread: { showCheckpoint = false; step(to: section.firstChunk) })
+                               isFirst: checkInIsFirst,
+                               isSecondTime: rereadSection == section.id,
+                               lastKeyAt: checkInKeyAt,
+                               onContinue: {
+                                   showCheckpoint = false
+                                   rereadSection = nil
+                                   step(to: section.lastChunk + 1)
+                               },
+                               onReread: {
+                                   showCheckpoint = false
+                                   rereadSection = section.id
+                                   step(to: section.firstChunk)
+                               })
                     .transition(.opacity)
             }
             if showBreak {
@@ -330,14 +348,14 @@ struct ReaderView: View {
         .padding(.top, 4)
     }
 
-    /// Deliberately phrased small. "Card 4 of 11 in this stretch" is a finishable
+    /// Deliberately phrased small. "Card 4 of 11 in this part" is a finishable
     /// number; "chunk 812 of 4,930" is a reason to close the app.
     private func positionText(_ section: Section) -> String {
         let within = index - section.firstChunk + 1
         let left = section.chunkCount - within
-        if left == 0 { return "Last card in this stretch" }
+        if left == 0 { return "Last card in this part" }
         if left <= 3 { return "\(left) more, then a breather" }
-        return "\(within) of \(section.chunkCount) in this stretch"
+        return "\(within) of \(section.chunkCount) in this part"
     }
 
     // MARK: - Navigation
@@ -353,6 +371,13 @@ struct ReaderView: View {
            index == section.lastChunk,
            settings.checkpointsEnabled {
             narrator.stop()
+            // Return and Space reach this again while the check-in is up.
+            // Only a new check-in counts, but every press holds off arming it.
+            if !showCheckpoint {
+                checkInIsFirst = checkInsShown == 0
+                checkInsShown += 1
+            }
+            checkInKeyAt = .now
             showCheckpoint = true
             return
         }
@@ -385,6 +410,9 @@ struct ReaderView: View {
     /// Going back is always available, in every mode. Being unable to re-read a
     /// sentence is a measurable comprehension cost, so nothing here is one-way.
     private func goBack() {
+        // The keys still reach the reader under the check-in. Moving the card
+        // behind it would make “Got it” land back on the same part.
+        guard !showCheckpoint else { return }
         step(to: max(0, index - 1))
     }
 

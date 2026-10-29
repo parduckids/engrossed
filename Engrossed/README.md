@@ -91,9 +91,10 @@ reason: adding one field to a saved format shouldn't empty your shelf.
 
 `Engrossed/Guide.pdf` is a short bundled book that explains the app. It is not an overlay of coach
 marks: it is a real document read in the real reader, so you learn the app by using it. It carries
-its own outline so the contents list works, a vector figure so zooming works, and enough words to
-reach one checkpoint. It is generated, not hand-drawn: see the script in the scratchpad notes, or
-regenerate from `store/`.
+its own outline so the contents list works and a vector figure so zooming works. It is shorter than
+one part, so it never reaches a check-in; launch a Debug build with `-debug.screen checkin` to see
+one. It still says "stretch" in two places and needs regenerating with "part". It is generated, not
+hand-drawn, but the script is not in this repo.
 
 It installs on first launch and opens straight away, it is marked `isGuide` so it does **not**
 consume the free book slot, and it never reinstalls once removed. Settings has a button to put it
@@ -132,11 +133,6 @@ Nothing here is finished, and some of it may not happen.
 - **A voice that reads along with you.** Not a separate audiobook: the same card, spoken, with the
   sentence you are hearing lit up as it goes. Reading and hearing the same words together is a
   common way to keep attention from sliding off the page.
-- **A real recap at the end of a stretch.** Today "Remind me" shows the opening words of each card.
-  It could be a proper summary of what you read. It would stay behind that button rather than
-  appearing automatically: having a go at recalling it first is the part that makes the checkpoint
-  work, and a summary handed to you up front quietly removes it. This is also the first feature
-  with a real per-user cost, which is what would justify a subscription tier.
 - **EPUB, web pages and papers.** Drop in an EPUB, paste a link to an article or an arXiv page, and
   get the same cards. Reflowable formats are easier than PDF, with no layout to reverse-engineer.
 - **Search.** Find a phrase inside a book and jump to that card, or search the whole shelf for the

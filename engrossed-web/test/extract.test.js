@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadFixture } from "./helpers/dom.js";
-import { extract } from "../src/reader/extract.js";
+import { extract, bestSource } from "../src/reader/extract.js";
 import { chunk, OPTIONS, SENTENCE_ENDERS } from "../src/reader/chunker.js";
 import { resolve, snippetOf } from "../src/reader/position.js";
 
@@ -163,4 +163,39 @@ test("a position survives the article gaining a paragraph", () => {
 
   assert.equal(after.chunks[landed].blockHash, current.blockHash,
                "lost the place when a paragraph was inserted above it");
+});
+
+// ---------- pictures ----------
+
+function imageIn(html) {
+  loadFixture("article.html");
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  return holder.querySelector("img");
+}
+
+test("a picture uses the sharp copy, not the page's thumbnail", () => {
+  // Wikipedia's markup: a 330px thumbnail, and a 960px copy for 2x screens.
+  // Taking src showed the thumbnail at its own size, small and soft.
+  const img = imageIn(`<img src="//thumb.example/330px-Pool.jpg" width="300" height="201"
+    srcset="//thumb.example/960px-Pool.jpg 2x">`);
+  assert.equal(bestSource(img), "//thumb.example/960px-Pool.jpg");
+});
+
+test("from a long list of widths, the first one sharp enough wins", () => {
+  const img = imageIn(`<img src="a-400.jpg"
+    srcset="a-400.jpg 400w, a-800.jpg 800w, a-1600.jpg 1600w, a-3200.jpg 3200w">`);
+  assert.equal(bestSource(img), "a-1600.jpg");
+});
+
+test("<picture> sources and lazy-loaded copies count too", () => {
+  const picture = imageIn(`<picture><source srcset="p-1200.webp 1200w, p-600.webp 600w">
+    <img src="p-300.jpg"></picture>`);
+  assert.equal(bestSource(picture), "p-1200.webp");
+  const lazy = imageIn(`<img src="data:image/gif;base64,R0lGOD" data-srcset="l-500.jpg 500w, l-1000.jpg 1000w">`);
+  assert.equal(bestSource(lazy), "l-1000.jpg");
+});
+
+test("a picture with only a placeholder is no picture", () => {
+  assert.equal(bestSource(imageIn(`<img src="data:image/gif;base64,R0lGOD">`)), "");
 });

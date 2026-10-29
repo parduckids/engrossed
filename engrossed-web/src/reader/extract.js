@@ -56,11 +56,49 @@ function stripCitations(root) {
   }
 }
 
+// About twice the widest the reading column gets, for a sharp picture on a
+// high-resolution screen. Anything bigger is download for nothing.
+const SHARP_ENOUGH = 1400;
+
+// The best copy of a picture the page offers. `src` is usually a thumbnail
+// sized for the page's own narrow column: on Wikipedia it is 330 pixels wide,
+// which looked tiny and soft in the reader. srcset and <picture> list sharper
+// copies of the same picture, which is what the browser itself would pick.
+export function bestSource(img) {
+  const base = Number(img.getAttribute("width")) || 300;
+  const candidates = [];
+  const add = (url, width) => {
+    if (url && !url.startsWith("data:")) candidates.push({ url, width });
+  };
+  add(img.getAttribute("src") || img.getAttribute("data-src"), base);
+
+  const sets = [img.getAttribute("srcset"), img.getAttribute("data-srcset")];
+  if (img.parentElement?.tagName === "PICTURE") {
+    for (const source of img.parentElement.querySelectorAll("source")) {
+      sets.push(source.getAttribute("srcset"), source.getAttribute("data-srcset"));
+    }
+  }
+  for (const set of sets.filter(Boolean)) {
+    // A comma followed by a space separates candidates; a bare comma can be
+    // part of a URL.
+    for (const candidate of set.trim().split(/,\s+/)) {
+      const [url, descriptor = "1x"] = candidate.trim().split(/\s+/);
+      const n = parseFloat(descriptor);
+      if (!n) continue;
+      add(url, descriptor.endsWith("w") ? n : n * base);
+    }
+  }
+  if (!candidates.length) return "";
+  candidates.sort((a, b) => a.width - b.width);
+  const pick = candidates.find((c) => c.width >= SHARP_ENOUGH) || candidates[candidates.length - 1];
+  return pick.url;
+}
+
 function imageFrom(element) {
   const img = element.tagName === "IMG" ? element : element.querySelector("img");
   if (!img) return null;
-  const src = img.getAttribute("src") || img.getAttribute("data-src") || "";
-  if (!src || src.startsWith("data:image/gif")) return null;
+  const src = bestSource(img);
+  if (!src) return null;
   const caption = element.tagName === "FIGURE"
     ? clean(element.querySelector("figcaption")?.textContent)
     : "";
