@@ -41,8 +41,8 @@ struct PaywallView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 9) {
-                    point("Paid once. Yours for good.")
-                    point("No subscription. No account. No sign up.")
+                    point("Paid once. No monthly fee, no account, ever.")
+                    point("No sign up, no ads, no tracking.")
                     point("Shared with your family. Up to five other people in your Family Sharing group get it without paying again.")
                     point("Reading works offline, like the rest of the app.")
                 }
