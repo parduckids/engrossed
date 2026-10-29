@@ -192,8 +192,9 @@ by default and not needed for anything. Nothing is sold or unlocked through it: 
 ElevenLabs directly under their own ElevenLabs account, and the app takes no part in that. With
 no key, read aloud uses the system's built-in voices.
 
-Settings > Also for Chrome links to a page about our free Chrome browser extension, for reading
-web articles on a computer. It is not a purchase and unlocks nothing in the app.
+Settings > Also for Chrome links to our free Chrome browser extension on the Chrome Web Store, for
+reading web articles on a computer. On iPhone and iPad it also offers to share the link, since the
+extension is used on a computer. It is not a purchase and unlocks nothing in the app.
 ```
 
 ---

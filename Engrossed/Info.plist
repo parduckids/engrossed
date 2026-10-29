@@ -24,6 +24,14 @@
 	     UISupportsDocumentBrowser=false is the other half of that statement: we
 	     are not a document browser app. Declaring one of the two keys is what
 	     stops the build warning about not saying whether we open in place. -->
+	<!-- The system shows this before the first frame. It was white, which
+	     flashed before the rose splash. This is the middle of the splash's
+	     gradient, so the hand-over is a fade rather than a flash. -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UISupportsDocumentBrowser</key>
 	<false/>
 	<!-- The app uses no encryption of its own. StoreKit, and the optional

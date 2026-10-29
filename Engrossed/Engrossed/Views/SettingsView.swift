@@ -27,6 +27,9 @@ struct SettingsForm: View {
 
     private var theme: PaperTheme { settings.theme }
 
+    private static let chromeStore =
+        URL(string: "https://chromewebstore.google.com/detail/engrossed/bopoanglnpekmepeeaofdofoealcngdg")!
+
     @State private var store = Store.shared
     @State private var showPaywall = false
     /// What has been pasted into the key field and not saved yet. Emptied the
@@ -165,19 +168,29 @@ struct SettingsForm: View {
                     }
                 }
 
-                // Points at our own page rather than the Chrome Web Store
-                // listing, so the store address can change, or not exist
-                // yet, without the app ever linking somewhere dead.
+                // The extension is live, so this goes straight to its Chrome
+                // Web Store page. A phone or tablet can't install a Chrome
+                // extension, so there the first choice is sending the link to
+                // the computer the reader will use it on.
                 group("Also for Chrome") {
                     #if os(iOS)
-                    caption("On your computer, Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved.")
+                    caption("On your computer, Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved. It’s free.")
+                    ShareLink(item: Self.chromeStore,
+                              subject: Text("Engrossed for Chrome"),
+                              message: Text("Engrossed for Chrome, free: long articles a few sentences at a time.")) {
+                        Text("Send the link to my computer")
+                    }
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(theme.accent)
+                    Link("Open the Chrome Web Store page", destination: Self.chromeStore)
+                        .font(.system(size: 13, design: .rounded))
+                        .foregroundStyle(theme.faint)
                     #else
-                    caption("Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved.")
-                    #endif
-                    Link("See Engrossed for Chrome",
-                         destination: URL(string: "https://parduckids.github.io/engrossed/chrome.html")!)
+                    caption("Engrossed for Chrome does the same for web articles: a few sentences at a time, with your place saved. It’s free.")
+                    Link("Add to Chrome, free", destination: Self.chromeStore)
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(theme.accent)
+                    #endif
                 }
 
                 group("Storage") {
