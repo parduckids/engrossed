@@ -8,13 +8,13 @@
       "internalID" : "E1F2A3B4",
       "localizations" : [
         {
-          "description" : "Keep several books on the shelf at once. One payment, no subscription.",
-          "displayName" : "Full shelf",
+          "description" : "Room for more books. Paid once, all yours forever.",
+          "displayName" : "More books",
           "locale" : "en_US"
         }
       ],
       "productID" : "com.lowshelf.engrossed.fullshelf",
-      "referenceName" : "Full shelf",
+      "referenceName" : "More books",
       "type" : "NonConsumable"
     }
   ],

@@ -131,11 +131,13 @@ First release.
 | Secondary category | Education |
 | Age rating | 4+ |
 | Price | Free, with one In-App Purchase |
-| In-App Purchase | Non-consumable, "Full shelf", 4.99 (Tier 5), **Family Sharing ON** |
+| In-App Purchase | Non-consumable, "More books", 4.99 (Tier 5), **Family Sharing ON** |
+| IAP display name (35 max) | `More books` |
+| IAP description (55 max) | `Room for more books. Paid once, all yours forever.` |
 | Content rights | Contains no third-party content |
 | Copyright | 2026 Adam Vörös |
 | Bundle ID | `com.lowshelf.engrossed` (permanent once shipped) |
-| IAP product ID | `com.lowshelf.engrossed.fullshelf` (permanent once sold) |
+| IAP product ID | `com.lowshelf.engrossed.fullshelf` (permanent once sold; readers never see it, so the old name inside it doesn't matter) |
 
 > **Family Sharing must be switched on when you first submit the purchase.** The paywall promises
 > it in writing, and `Engrossed.storekit` sets `familyShareable` for local testing, but the real
@@ -182,7 +184,7 @@ Password-protected PDFs, scanned PDFs with no selectable text, and damaged files
 detected and explained rather than failing silently.
 
 In-App Purchase: one book at a time is free with no limit on time, pages or features. The
-purchase ("Full shelf", non-consumable, family shareable) removes the one-book-at-a-time limit.
+purchase ("More books", non-consumable, family shareable) removes the one-book-at-a-time limit.
 Deleting a book and importing a different one is always free and unlimited. The bundled guide
 does not count towards the limit.
 
