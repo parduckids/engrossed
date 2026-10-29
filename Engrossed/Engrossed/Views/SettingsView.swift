@@ -140,11 +140,11 @@ struct SettingsForm: View {
 
                 group("Shelf") {
                     if store.isUnlocked {
-                        caption("The shelf is unlocked. Thank you, genuinely.")
+                        caption("You have the full shelf. Thank you, genuinely.")
                     } else {
                         caption("One book at a time is free, forever. Delete it and add another as often as you like. Keeping several at once is a single payment.")
                         HStack(spacing: 10) {
-                            Button("See the unlock") { showPaywall = true }
+                            Button("Get the full shelf") { showPaywall = true }
                                 .buttonStyle(SoftButtonStyle(theme: theme))
                             Button("Restore purchase") { Task { await store.restore() } }
                                 .buttonStyle(.plain)
