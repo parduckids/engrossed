@@ -43,12 +43,20 @@
 
   <h2>Location</h2>
   <p>With your permission, the app reads your location when you ask it to pin where you stand, and when
-  the list sorts fossicks by distance. It is read while the app is in use, never tracked in the background,
-  and not stored beyond the pins you choose to make.</p>
+  the list sorts fossicks by distance. Otherwise it is read only while the app is in use.</p>
+  <p>The one exception is Xplore. While you have a walk going, the app keeps reading your location, also in
+  the background, so it can draw your trail and point the way back. The trail is kept on the phone with your
+  walks, and tracking stops when you finish the walk.</p>
 
-  <h2>The map</h2>
-  <p>Map tiles come from Apple Maps under Apple's privacy policy. Your pins are drawn by the app on top
-  of the map and are never sent to Apple.</p>
+  <h2>The maps</h2>
+  <p>The main map's tiles come from Apple Maps under Apple's privacy policy.</p>
+  <p>The Xplore topo map is drawn by the app from OpenStreetMap data served by OpenFreeMap, with terrain
+  from AWS Terrain Tiles. To show the map, the phone asks those services for the map squares around where
+  you are looking, as any map does. When you keep an area offline, it downloads that area's squares once and
+  works out the contour lines on the phone.</p>
+  <p>Public land boundaries and the rules shown for land and for catches are built into the app, so looking
+  them up sends nothing anywhere. On every map, your pins and trails are drawn by the app on top and are
+  never sent to anyone.</p>
 
   <h2>Photos</h2>
   <p>Photos you attach are copied into the app at a reduced size. The originals in your photo library are
