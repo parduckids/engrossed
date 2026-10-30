@@ -171,3 +171,14 @@ test("does not split after a dotted abbreviation such as U.S.", () => {
   }
   assert.equal(splitSentences("Stop. Think about it. Then act.").length, 3);
 });
+
+// The titles the app's tokenizer was measured stranding. Both chunkers carry
+// the same list, so the same text makes the same cards in either.
+test("does not split after a title such as Gen. or Sen.", () => {
+  for (const title of ["Gen.", "Capt.", "Sgt.", "Col.", "Lt.", "Gov.", "Sen.", "Rev.", "Hon."]) {
+    const text = `It was ${title} Grant who spoke first. Nobody else did.`;
+    const sentences = splitSentences(text);
+    assert.equal(sentences.length, 2, `${title}: ${JSON.stringify(sentences)}`);
+    assert.ok(sentences[0].startsWith("It was") && sentences[0].endsWith("spoke first."), title);
+  }
+});

@@ -1,14 +1,17 @@
 import Foundation
 import PDFKit
+import ImageIO
 import SwiftUI
 import Observation
 
-/// Renders a region of a PDF page into an image, and remembers it.
+/// Renders a region of a PDF page, or decodes a picture stored in an EPUB,
+/// into an image, and remembers it.
 ///
-/// Figures are drawn straight from the document rather than extracted as
+/// PDF figures are drawn straight from the document rather than extracted as
 /// embedded image files: a chart in a PDF is usually vector drawing commands
 /// with text on top, not a picture, so re-rendering the region is the only way
-/// to get back what the page actually looked like.
+/// to get back what the page actually looked like. An EPUB picture is the
+/// opposite case: it is a file in the book, and decoding it is all there is.
 @MainActor
 final class FigureCache {
     static let shared = FigureCache()
@@ -40,6 +43,12 @@ final class FigureCache {
 
     private var failed: Set<String> = []
 
+    /// Loads already under way, so that two views asking for the same picture
+    /// at once share one decode. Cards mode measures a card by building it
+    /// twice, and both copies of a figure card would otherwise decode the same
+    /// picture side by side.
+    private var inFlight: [String: Task<CGImage?, Never>] = [:]
+
     private func key(_ url: URL, _ page: Int, _ region: FigureRegion, _ width: Int) -> String {
         // Int(_: Double) traps above Int.max rather than saturating, and a
         // figure region can carry an absurd size straight from a page whose
@@ -58,22 +67,60 @@ final class FigureCache {
         // Bucket the width so a resizing window doesn’t re-render continuously.
         let bucket = max(240, (pixelWidth / 160) * 160)
         let id = key(documentURL, page, region, bucket)
+        return await load(id, detail: detail) {
+            FigureCache.render(documentURL: documentURL, page: page,
+                               region: region, pixelWidth: bucket)
+        }
+    }
+
+    /// A picture stored in an EPUB, decoded to about `pixelWidth` across.
+    ///
+    /// - Parameter archiveURL: the EPUB itself. The picture is read out of it
+    ///   each time rather than kept anywhere else, since the book already is
+    ///   the copy.
+    func image(archiveURL: URL, picture: EmbeddedImage,
+               pixelWidth: Int, detail: Bool = false) async -> CGImage? {
+        // Rounded up rather than down, and never past the picture's own width.
+        // A PDF region can be drawn at any size, but a bitmap has a fixed
+        // amount of detail, and a bucket below its width would throw some away.
+        var bucket = max(240, ((pixelWidth + 159) / 160) * 160)
+        if picture.pixelWidth > 0 { bucket = min(bucket, picture.pixelWidth) }
+
+        // The decoder is limited by the longer side, so a tall picture needs a
+        // limit taller than it is wide. A card has no use for one far taller
+        // than the screen, though, and a bitmap that size would crowd every
+        // other figure out of the cache.
+        let aspect = picture.aspectRatio ?? 1
+        let longest = aspect >= 1 ? Double(bucket) : Double(bucket) / aspect
+        let ceiling = detail ? 8000 : min(4096, bucket * 2)
+        let maxPixelSize = max(1, Int(min(longest, Double(ceiling)).rounded()))
+
+        let id = "\(archiveURL.lastPathComponent)|\(picture.path)|\(bucket)"
+        return await load(id, detail: detail) {
+            FigureCache.decode(archiveURL: archiveURL, path: picture.path, maxPixelSize: maxPixelSize)
+        }
+    }
+
+    private func load(_ id: String, detail: Bool,
+                      make: @escaping @Sendable () -> CGImage?) async -> CGImage? {
         let store = detail ? details : images
         if let cached = store.object(forKey: id as NSString) { return cached.image }
         if failed.contains(id) { return nil }
+        let flight = (detail ? "detail|" : "card|") + id
+        if let running = inFlight[flight] { return await running.value }
 
-        let rendered = await Task.detached(priority: .userInitiated) {
-            FigureCache.render(documentURL: documentURL, page: page,
-                               region: region, pixelWidth: bucket)
-        }.value
+        let task = Task.detached(priority: .userInitiated) { make() }
+        inFlight[flight] = task
+        let made = await task.value
+        inFlight[flight] = nil
 
-        if let rendered {
-            let bytes = rendered.bytesPerRow * rendered.height
-            store.setObject(Box(rendered), forKey: id as NSString, cost: bytes)
+        if let made {
+            let bytes = made.bytesPerRow * made.height
+            store.setObject(Box(made), forKey: id as NSString, cost: bytes)
         } else {
             failed.insert(id)
         }
-        return rendered
+        return made
     }
 
     nonisolated static func render(documentURL: URL, page pageIndex: Int,
@@ -81,9 +128,20 @@ final class FigureCache {
         guard let document = PDFDocument(url: documentURL),
               let page = document.page(at: pageIndex) else { return nil }
 
-        let rect = region.rect
-        guard rect.width > 1, rect.height > 1,
-              rect.width.isFinite, rect.height.isFinite else { return nil }
+        // The region is in page space, where characterBounds reported it. But
+        // draw(with:to:) does not draw page space as it stands: it first
+        // applies the page's display transform, which moves the media box's
+        // corner to the origin and turns the page by its rotation. Translating
+        // by the region's own origin was therefore right only for an upright
+        // page whose media box starts at 0,0; anywhere else it showed some
+        // other part of the page. Passing the region through the same
+        // transform puts the rectangle and the drawing in one space, and since
+        // that space is the page as it is displayed, the figure comes out
+        // upright on a rotated page as well.
+        let rect = region.rect.applying(page.transform(for: .mediaBox)).standardized
+        guard !rect.isNull, rect.width > 1, rect.height > 1,
+              rect.width.isFinite, rect.height.isFinite,
+              rect.minX.isFinite, rect.minY.isFinite else { return nil }
 
         // A tall, narrow figure reaches an absurd height long before its width
         // looks large. Shrink to fit rather than refusing to draw it — failing
@@ -112,8 +170,57 @@ final class FigureCache {
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         context.scaleBy(x: scale, y: scale)
         context.translateBy(x: -rect.minX, y: -rect.minY)
-        page.draw(with: .mediaBox, to: context)
+        // A page only refers weakly to its document, and nothing reads the
+        // document after the guard above, so an optimised build is free to
+        // release it before the page is drawn. PDFKit then logs that drawing
+        // a page without its document is unsupported and may draw nothing.
+        withExtendedLifetime(document) {
+            page.draw(with: .mediaBox, to: context)
+        }
         return context.makeImage()
+    }
+
+    nonisolated static func decode(archiveURL: URL, path: String, maxPixelSize: Int) -> CGImage? {
+        guard let archive = ZipArchive(url: archiveURL),
+              let name = archive.name(matching: path),
+              let data = archive.contents(of: name),
+              let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+
+        // Decoding straight to the size needed is far cheaper than decoding a
+        // whole photograph and shrinking it afterwards, and it never enlarges:
+        // a small picture comes back at its own size. The transform option
+        // applies the EXIF orientation, so a photo shot sideways is upright.
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixelSize),
+        ]
+        guard let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
+        return onWhite(decoded)
+    }
+
+    /// The picture laid on a white page.
+    ///
+    /// Line drawings in books are routinely black ink on a transparent
+    /// background, drawn for a white page. On the dark theme's background the
+    /// ink would vanish. PDF figures are rendered on white for the same
+    /// reason, so this keeps the two kinds alike.
+    nonisolated private static func onWhite(_ image: CGImage) -> CGImage {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        else { return image }
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(bounds)
+        context.draw(image, in: bounds)
+        return context.makeImage() ?? image
     }
 }
 
@@ -129,8 +236,35 @@ struct FigureCard: View {
     @State private var showViewer = false
 
     private var theme: PaperTheme { settings.theme }
-    private var aspect: Double { chunk.figure?.aspectRatio ?? 1.6 }
-    private var canOpen: Bool { image != nil && chunk.figure != nil && documentURL != nil }
+    private var hasSource: Bool { chunk.figure != nil || chunk.image != nil }
+    private var canOpen: Bool { image != nil && hasSource && documentURL != nil }
+
+    /// The shape the card holds. Once the picture is here it is the picture's
+    /// own: a figure from a rotated page is turned upright, so the shape of
+    /// its region on the page is the wrong way round.
+    private var aspect: Double {
+        if let image, image.width > 0, image.height > 0 {
+            return Double(image.width) / Double(image.height)
+        }
+        return chunk.image?.aspectRatio ?? chunk.figure?.aspectRatio ?? 1.6
+    }
+
+    /// An EPUB picture is never stretched past one point per pixel. A small
+    /// engraving blown up to the full reading width is a blur, and the book
+    /// meant it to sit small on the page.
+    private var pictureWidth: CGFloat {
+        guard let picture = chunk.image, picture.pixelWidth > 0 else { return settings.maxTextWidth }
+        return min(settings.maxTextWidth, CGFloat(picture.pixelWidth))
+    }
+
+    private var caption: String { chunk.image?.caption ?? "" }
+
+    private var accessibilityText: String {
+        guard var description = [chunk.image?.alt ?? "", caption].first(where: { !$0.isEmpty })
+        else { return "Figure. Open to zoom." }
+        while let last = description.last, ".:;,".contains(last) { description.removeLast() }
+        return "Figure: \(description). Open to zoom."
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -152,7 +286,7 @@ struct FigureCard: View {
                 }
             }
             .aspectRatio(aspect, contentMode: .fit)
-            .frame(maxWidth: settings.maxTextWidth)
+            .frame(maxWidth: pictureWidth)
             .overlay(alignment: .bottomTrailing) {
                 // A quiet affordance. Dense diagrams are unreadable at reading
                 // width, and nothing else on the card says it can be opened.
@@ -174,7 +308,16 @@ struct FigureCard: View {
                 if canOpen { showViewer = true }
             })
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel("Figure. Open to zoom.")
+            .accessibilityLabel(accessibilityText)
+
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.system(size: settings.fontSize * 0.72, design: settings.font.design))
+                    .foregroundStyle(theme.ink.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: settings.maxTextWidth, alignment: .leading)
+                    .textSelection(.enabled)
+            }
         }
         .frame(maxWidth: settings.maxTextWidth, alignment: .leading)
         .task(id: chunk.id) {
@@ -199,15 +342,24 @@ struct FigureCard: View {
     }
 
     private func load() async {
-        guard image == nil, let documentURL, let region = chunk.figure else {
-            didFail = chunk.figure == nil
+        guard image == nil, let documentURL, hasSource else {
+            didFail = !hasSource
             return
         }
         let width = Int(settings.maxTextWidth * 2)
-        let rendered = await FigureCache.shared.image(documentURL: documentURL,
+        let rendered: CGImage?
+        if let picture = chunk.image {
+            rendered = await FigureCache.shared.image(archiveURL: documentURL,
+                                                     picture: picture,
+                                                     pixelWidth: width)
+        } else if let region = chunk.figure {
+            rendered = await FigureCache.shared.image(documentURL: documentURL,
                                                      page: chunk.page,
                                                      region: region,
                                                      pixelWidth: width)
+        } else {
+            rendered = nil
+        }
         if let rendered { image = rendered } else { didFail = true }
     }
 }

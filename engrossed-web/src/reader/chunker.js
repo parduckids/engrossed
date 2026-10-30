@@ -138,6 +138,11 @@ export function isFragment(paragraph) {
 }
 
 // Abbreviations that end in a full stop without ending a sentence.
+//
+// Kept in step with Chunker.abbreviations in the app. The titles on the last
+// line are ones Apple's NLTokenizer was measured stranding ("Gen." alone, then
+// "Grant took the city."). They are listed here too so the two readers cut the
+// same text into the same cards.
 const ABBREVIATIONS = new Set([
   "dr", "mr", "mrs", "ms", "prof", "rev", "hon", "st", "mt",
   "fig", "figs", "no", "nos", "vs", "v", "ed", "eds", "vol", "vols",
@@ -145,6 +150,7 @@ const ABBREVIATIONS = new Set([
   "inc", "ltd", "co", "corp", "dept", "univ",
   "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sept", "sep", "oct", "nov", "dec",
   "jr", "sr", "sq", "ft", "in", "lb", "oz", "ml", "cm", "mm", "km", "kg",
+  "gen", "capt", "sgt", "col", "lt", "gov", "sen",
 ]);
 
 // Whether a segment is an abbreviation that the segmenter mistook for the end

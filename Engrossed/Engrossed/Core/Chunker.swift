@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import NaturalLanguage
 
 /// Turns paragraphs into reading cards.
@@ -46,7 +47,41 @@ enum Chunker {
         static let roomy = Options(targetWords: 70, maxWords: 120, runOnSentenceWords: 130, sectionWords: 900)
     }
 
+    /// One unit of a page in reading order, from whichever reader produced it.
+    ///
+    /// The PDF and EPUB readers meet here rather than in TextExtractor's own
+    /// block type because their pictures are nothing alike: a PDF figure is a
+    /// region of the page to draw again, an EPUB picture is a file in the book.
+    enum Block {
+        case paragraph(String)
+        case heading(String)
+        /// A figure on a PDF page, in the page's own coordinate space.
+        case region(CGRect)
+        /// A picture stored in an EPUB.
+        case picture(EmbeddedImage)
+    }
+
+    struct Page {
+        let pageIndex: Int
+        let blocks: [Block]
+    }
+
     static func chunk(pages: [TextExtractor.PageText], options: Options = .standard) -> BookText {
+        let converted = pages.map { page in
+            Page(pageIndex: page.pageIndex, blocks: page.blocks.compactMap { block -> Block? in
+                // Matched case by case rather than switched over, so a kind of
+                // block this file has not been taught about is dropped rather
+                // than failing the build.
+                if case .paragraph(let text) = block { return .paragraph(text) }
+                if case .heading(let title) = block { return .heading(title) }
+                if case .figure(let rect) = block { return .region(rect) }
+                return nil
+            })
+        }
+        return chunk(pages: converted, options: options)
+    }
+
+    static func chunk(pages: [Page], options: Options = .standard) -> BookText {
         var chunks: [Chunk] = []
 
         for page in stitchAcrossPages(pages) {
@@ -84,7 +119,7 @@ enum Chunker {
                     continue
                 }
                 guard case .paragraph(let paragraph) = block else {
-                    if case .figure(let rect) = block {
+                    if case .region(let rect) = block {
                         flushFragments()
                         chunks.append(Chunk(id: chunks.count,
                                             text: "",
@@ -94,6 +129,19 @@ enum Chunker {
                                             wordCount: 0,
                                             kind: .figure,
                                             figure: FigureRegion(rect)))
+                    } else if case .picture(let picture) = block {
+                        // The caption doubles as the card's text, so a place
+                        // saved on a picture can be found again by its words.
+                        // It counts no words: it is shown, not read in sequence.
+                        flushFragments()
+                        chunks.append(Chunk(id: chunks.count,
+                                            text: picture.caption,
+                                            page: page.pageIndex,
+                                            section: 0,
+                                            startsParagraph: true,
+                                            wordCount: 0,
+                                            kind: .figure,
+                                            image: picture))
                     }
                     continue
                 }
@@ -238,8 +286,8 @@ enum Chunker {
     /// here as two paragraphs. Left alone, that produces a card ending mid-clause
     /// at every page break — roughly once a page, which is exactly the kind of
     /// snag this app exists to remove. Rejoin them.
-    static func stitchAcrossPages(_ pages: [TextExtractor.PageText]) -> [TextExtractor.PageText] {
-        var result: [TextExtractor.PageText] = []
+    static func stitchAcrossPages(_ pages: [Page]) -> [Page] {
+        var result: [Page] = []
 
         for page in pages {
             var blocks = page.blocks
@@ -252,10 +300,9 @@ enum Chunker {
                 var merged = previous.blocks
                 merged[merged.count - 1] = .paragraph(tail + " " + head)
                 blocks.removeFirst()
-                result[result.count - 1] = TextExtractor.PageText(pageIndex: previous.pageIndex,
-                                                                  blocks: merged)
+                result[result.count - 1] = Page(pageIndex: previous.pageIndex, blocks: merged)
             }
-            result.append(TextExtractor.PageText(pageIndex: page.pageIndex, blocks: blocks))
+            result.append(Page(pageIndex: page.pageIndex, blocks: blocks))
         }
         return result
     }
@@ -307,15 +354,74 @@ enum Chunker {
 
     // MARK: - Sentences
 
+    /// Abbreviations that end in a full stop without ending a sentence.
+    ///
+    /// Kept in step with ABBREVIATIONS in the Chrome extension's chunker.js,
+    /// so the app and the extension cut the same text into the same cards.
+    /// The titles on the last line are ones NLTokenizer was measured
+    /// stranding: "Gen." as a sentence on its own, then "Grant took the city."
+    static let abbreviations: Set<String> = [
+        "dr", "mr", "mrs", "ms", "prof", "rev", "hon", "st", "mt",
+        "fig", "figs", "no", "nos", "vs", "v", "ed", "eds", "vol", "vols",
+        "pp", "al", "etc", "cf", "ca", "approx", "est",
+        "inc", "ltd", "co", "corp", "dept", "univ",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sept", "sep", "oct", "nov", "dec",
+        "jr", "sr", "sq", "ft", "in", "lb", "oz", "ml", "cm", "mm", "km", "kg",
+        "gen", "capt", "sgt", "col", "lt", "gov", "sen",
+    ]
+
+    /// Whether a segment is an abbreviation that the tokenizer mistook for the
+    /// end of a sentence.
+    ///
+    /// NLTokenizer splits "J. R. R. Tolkien wrote it." into four sentences and
+    /// "Brown v. Board" into two, and a card that ends on "v." is exactly the
+    /// mid-sentence cut this file exists to prevent. The test is on the last
+    /// word of the segment rather than the whole of it, which is what catches
+    /// "Compare v." and "2.1 with v." alike. Ported from the extension, which
+    /// met the same problem in Intl.Segmenter first.
+    static func isStranded(_ segment: String) -> Bool {
+        let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix("."),
+              let lastWord = trimmed.split(whereSeparator: \.isWhitespace).last else { return false }
+        let word = lastWord.drop(while: { "(\"'\u{2018}\u{201C}".contains($0) })
+        let bare = word.dropLast().lowercased()
+        guard !bare.isEmpty else { return false }
+        if abbreviations.contains(bare) { return true }
+        // A single letter is an initial: "J. R. R. Tolkien".
+        if bare.count == 1, bare.first?.isLetter == true { return true }
+        // Dotted letters are an abbreviation too: "U.S.", "D.C.", "e.g.",
+        // "i.e.", "a.m.", "p.m.". Letters alternate with stops, ending on a
+        // letter because the final stop was dropped above.
+        let characters = Array(bare)
+        guard characters.count >= 3, characters.count % 2 == 1 else { return false }
+        for (offset, character) in characters.enumerated() {
+            let fits = offset % 2 == 0 ? character.isLetter : character == "."
+            if !fits { return false }
+        }
+        return true
+    }
+
     static func splitSentences(_ text: String, options: Options = .standard) -> [String] {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = text
         var sentences: [String] = []
+        // Merging a stranded abbreviation forward is deliberately the safe
+        // direction. Over-merging costs nothing, because sentences are packed
+        // up to the word target anyway; under-merging is the broken card.
+        var stranded = ""
         tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
             let s = text[range].trimmingCharacters(in: .whitespacesAndNewlines)
-            if !s.isEmpty { sentences.append(s) }
+            guard !s.isEmpty else { return true }
+            let joined = stranded.isEmpty ? s : stranded + " " + s
+            if isStranded(s) {
+                stranded = joined
+            } else {
+                sentences.append(joined)
+                stranded = ""
+            }
             return true
         }
+        if !stranded.isEmpty { sentences.append(stranded) }
         if sentences.isEmpty {
             let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !t.isEmpty { sentences = [t] }
