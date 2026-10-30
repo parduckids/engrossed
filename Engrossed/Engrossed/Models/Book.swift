@@ -125,8 +125,53 @@ enum ChunkKind: String, Codable, Hashable {
     /// read left-to-right as sentences.
     case aside
     /// A picture: a diagram, chart, photograph or anything else drawn rather
-    /// than typeset. Rendered from the PDF itself.
+    /// than typeset. Rendered from the PDF itself, or for an EPUB, read from
+    /// the picture file inside the book.
     case figure
+}
+
+/// A picture stored inside an EPUB, found by its path in the book's archive.
+///
+/// The picture itself is never copied into the cache: the book already holds
+/// it, and a parsed-text file that carried every illustration would be as
+/// large as the book for no gain.
+struct EmbeddedImage: Codable, Hashable {
+    /// The entry's name inside the EPUB's ZIP archive.
+    var path: String
+    /// The book's own description of the picture, for VoiceOver.
+    var alt: String = ""
+    /// The line printed under the picture, shown under it on the card.
+    var caption: String = ""
+    /// Size in pixels as the picture is displayed, which is known at import.
+    /// It lets the card take the picture's shape before the picture loads,
+    /// instead of jumping when it arrives.
+    var pixelWidth: Int = 0
+    var pixelHeight: Int = 0
+
+    init(path: String, alt: String = "", caption: String = "",
+         pixelWidth: Int = 0, pixelHeight: Int = 0) {
+        self.path = path
+        self.alt = alt
+        self.caption = caption
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+    }
+
+    enum CodingKeys: String, CodingKey { case path, alt, caption, pixelWidth, pixelHeight }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        path = try c.decode(String.self, forKey: .path)
+        alt = try c.decodeIfPresent(String.self, forKey: .alt) ?? ""
+        caption = try c.decodeIfPresent(String.self, forKey: .caption) ?? ""
+        pixelWidth = try c.decodeIfPresent(Int.self, forKey: .pixelWidth) ?? 0
+        pixelHeight = try c.decodeIfPresent(Int.self, forKey: .pixelHeight) ?? 0
+    }
+
+    var aspectRatio: Double? {
+        guard pixelWidth > 0, pixelHeight > 0 else { return nil }
+        return Double(pixelWidth) / Double(pixelHeight)
+    }
 }
 
 /// Where a figure sits on its page, in the page’s own coordinate space.
@@ -156,17 +201,20 @@ struct Chunk: Codable, Identifiable, Hashable {
     var startsParagraph: Bool
     var wordCount: Int
     var kind: ChunkKind = .prose
-    /// Set only for `.figure` cards.
+    /// Set only for `.figure` cards drawn from a PDF page.
     var figure: FigureRegion?
+    /// Set only for `.figure` cards showing a picture from an EPUB.
+    var image: EmbeddedImage?
 
     var isProse: Bool { kind == .prose }
 
     enum CodingKeys: String, CodingKey {
-        case id, text, page, section, startsParagraph, wordCount, kind, figure
+        case id, text, page, section, startsParagraph, wordCount, kind, figure, image
     }
 
     init(id: Int, text: String, page: Int, section: Int, startsParagraph: Bool,
-         wordCount: Int, kind: ChunkKind = .prose, figure: FigureRegion? = nil) {
+         wordCount: Int, kind: ChunkKind = .prose, figure: FigureRegion? = nil,
+         image: EmbeddedImage? = nil) {
         self.id = id
         self.text = text
         self.page = page
@@ -175,6 +223,7 @@ struct Chunk: Codable, Identifiable, Hashable {
         self.wordCount = wordCount
         self.kind = kind
         self.figure = figure
+        self.image = image
     }
 
     init(from decoder: Decoder) throws {
@@ -199,6 +248,11 @@ struct Chunk: Codable, Identifiable, Hashable {
                   region.width < 20_000, region.height < 20_000 else { return nil }
             return region
         }
+        // Absent from every cache written before EPUB pictures existed, and
+        // for the same reason as the region above, a bad one costs the card
+        // its picture rather than the book its cache.
+        let savedImage = try? c.decodeIfPresent(EmbeddedImage.self, forKey: .image)
+        image = savedImage.flatMap { $0.path.isEmpty ? nil : $0 }
     }
 }
 
@@ -258,7 +312,12 @@ struct BookText: Codable {
     /// payloads, so it is retired rather than reused: a stale v6 file is
     /// indistinguishable from a current one by the version check alone, and
     /// lenient decoding would quietly accept it with its newer fields empty.
-    static let currentVersion = 7
+    ///
+    /// Version 8 is when EPUBs gained pictures and real headings. A version 7
+    /// EPUB cache decodes cleanly, with no pictures in it at all, so without
+    /// the bump every book already on the shelf would keep its missing covers
+    /// and plates for ever.
+    static let currentVersion = 8
 
     var version: Int = BookText.currentVersion
     var chunks: [Chunk]

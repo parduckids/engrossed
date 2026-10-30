@@ -21,6 +21,8 @@ struct ZipArchive {
     private let data: Data
     private(set) var entries: [String: Entry] = [:]
     private(set) var order: [String] = []
+    /// Lowercased name to the name as stored, for `name(matching:)`.
+    private var foldedNames: [String: String] = [:]
 
     /// A single entry larger than this is refused. No sane EPUB chapter is
     /// anywhere near it, and it stops a crafted archive claiming a gigabyte.
@@ -107,11 +109,26 @@ struct ZipArchive {
                                   localHeaderOffset: Int(localOffset))
                 if entries[name] == nil { order.append(name) }
                 entries[name] = entry
+                if foldedNames[name.lowercased()] == nil { foldedNames[name.lowercased()] = name }
             }
 
             offset = nameStart + Int(nameLength) + Int(extraLength) + Int(commentLength)
         }
         return !entries.isEmpty
+    }
+
+    // MARK: - Lookup
+
+    /// The stored name for a path, tolerating a difference in letter case.
+    ///
+    /// EPUBs are mostly authored on Windows and macOS, whose file systems do
+    /// not care about case, so a book that says "Images/Plate1.JPG" while the
+    /// archive holds "images/plate1.jpg" works in the tool that made it and in
+    /// most readers. Refusing the picture over it would be pedantry the
+    /// reader pays for.
+    func name(matching path: String) -> String? {
+        if entries[path] != nil { return path }
+        return foldedNames[path.lowercased()]
     }
 
     // MARK: - Extraction
@@ -135,6 +152,48 @@ struct ZipArchive {
         let payload = data.subdata(in: (data.startIndex + start)..<(data.startIndex + start + entry.compressedSize))
         guard entry.isCompressed else { return payload }
         return ZipArchive.inflate(payload, expecting: entry.uncompressedSize)
+    }
+
+    /// The first bytes of an entry, without inflating the rest of it.
+    ///
+    /// Enough to read a picture's header, which is all the import needs to
+    /// know about it: its format and its size. Inflating every illustration
+    /// in full just to measure it would make importing a picture book as slow
+    /// as decoding every picture in it.
+    func prefix(of name: String, maxBytes: Int) -> Data? {
+        guard let entry = entries[name], maxBytes > 0 else { return nil }
+        guard entry.compressedSize <= ZipArchive.maximumEntrySize else { return nil }
+
+        let header = entry.localHeaderOffset
+        guard uint32(at: header) == 0x0403_4b50,
+              let nameLength = uint16(at: header + 26),
+              let extraLength = uint16(at: header + 28)
+        else { return nil }
+
+        let start = header + 30 + Int(nameLength) + Int(extraLength)
+        guard start >= 0, start + entry.compressedSize <= data.count else { return nil }
+
+        guard entry.isCompressed else {
+            let length = min(maxBytes, entry.compressedSize)
+            return data.subdata(in: (data.startIndex + start)..<(data.startIndex + start + length))
+        }
+
+        // compression_decode_buffer stops once the destination is full, so a
+        // small destination is all it takes to inflate only the front of the
+        // entry. The source is read in place, without copying it out first.
+        let size = min(maxBytes, max(entry.uncompressedSize, 1))
+        var output = Data(count: size)
+        let written: Int = output.withUnsafeMutableBytes { destination in
+            guard let destinationBase = destination.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+            return data.withUnsafeBytes { source in
+                guard let sourceBase = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                return compression_decode_buffer(destinationBase, size,
+                                                 sourceBase + start, entry.compressedSize,
+                                                 nil, COMPRESSION_ZLIB)
+            }
+        }
+        guard written > 0 else { return nil }
+        return written == size ? output : output.prefix(written)
     }
 
     /// ZIP stores raw deflate with no zlib wrapper, which is exactly what

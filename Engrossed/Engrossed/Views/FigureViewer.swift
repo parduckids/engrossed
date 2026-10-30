@@ -8,6 +8,10 @@ import SwiftUI
 /// asking PDFKit to draw the same region again at a higher pixel width genuinely
 /// recovers detail — axis labels and footnotes that were an unreadable smudge
 /// become text. Zooming therefore re-renders rather than scaling up.
+///
+/// An EPUB picture is a bitmap, so there is no more to recover than its own
+/// pixels. The card holds a copy shrunk to reading width; zooming decodes the
+/// file again at up to its full size, and past that magnifies the pixels.
 struct FigureViewer: View {
     let chunk: Chunk
     let settings: ReadingSettings
@@ -198,21 +202,45 @@ struct FigureViewer: View {
         }
     }
 
-    private func render(containerWidth: CGFloat, zoom: CGFloat) async {
-        guard let documentURL, let region = chunk.figure, containerWidth > 0 else { return }
+    /// The figure's shape. The bitmap on screen is the authority once there is
+    /// one: a figure from a rotated page is drawn upright, the other way round
+    /// from its region on the page.
+    private var aspect: Double {
+        if let image, image.width > 0, image.height > 0 {
+            return Double(image.width) / Double(image.height)
+        }
+        return chunk.image?.aspectRatio ?? chunk.figure?.aspectRatio ?? 1
+    }
 
-        let target = targetPixelWidth(containerWidth: containerWidth, zoom: zoom,
-                                      aspect: region.aspectRatio)
+    private func render(containerWidth: CGFloat, zoom: CGFloat) async {
+        guard let documentURL, containerWidth > 0 else { return }
+
+        var target = targetPixelWidth(containerWidth: containerWidth, zoom: zoom, aspect: aspect)
+        if let picture = chunk.image, picture.pixelWidth > 0 {
+            // A bitmap holds no more than its own pixels. Asking for more would
+            // only decode the same picture again, at every step of the zoom.
+            target = min(target, picture.pixelWidth)
+        }
         // Only ever go up: dropping back to a coarse bitmap when zooming out
         // would make the picture visibly degrade under your hands.
         guard target > renderedWidth else { return }
 
         isRendering = true
-        let rendered = await FigureCache.shared.image(documentURL: documentURL,
+        let rendered: CGImage?
+        if let picture = chunk.image {
+            rendered = await FigureCache.shared.image(archiveURL: documentURL,
+                                                     picture: picture,
+                                                     pixelWidth: target,
+                                                     detail: true)
+        } else if let region = chunk.figure {
+            rendered = await FigureCache.shared.image(documentURL: documentURL,
                                                      page: chunk.page,
                                                      region: region,
                                                      pixelWidth: target,
                                                      detail: true)
+        } else {
+            rendered = nil
+        }
         isRendering = false
         if let rendered {
             image = rendered
