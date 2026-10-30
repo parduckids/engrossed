@@ -22,6 +22,9 @@ struct ReaderView: View {
     /// say so when they reach it a second time.
     @State private var rereadSection: Int?
     @State private var checkInKeyAt = Date()
+    /// The words on screen when the card size last changed.
+    @State private var reloadAnchor: ReloadAnchor?
+    @State private var reloadGeneration = 0
     @State private var showBreak = false
     @State private var showSettings = false
     @State private var showContents = false
@@ -82,7 +85,22 @@ struct ReaderView: View {
             Task { await reload() }
         }
         .onChange(of: sprint.didFinish) { _, finished in
-            if finished { showBreak = true; narrator.stop() }
+            if finished && settings.sprintEnabled { showBreak = true; narrator.stop() }
+        }
+        // Turning sprints off mid-book used to leave the hidden timer running,
+        // and the break screen came up anyway twenty minutes later.
+        .onChange(of: settings.sprintEnabled) { _, enabled in
+            if enabled {
+                sprint.targetMinutes = settings.sprintMinutes
+                sprint.start()
+            } else {
+                sprint.pause()
+                resumeSprintOnReturn = false
+                showBreak = false
+            }
+        }
+        .onChange(of: settings.sprintMinutes) { _, minutes in
+            sprint.targetMinutes = minutes
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -178,7 +196,8 @@ struct ReaderView: View {
                                  settings: settings,
                                  onAdvance: advance,
                                  onBack: goBack,
-                                 documentURL: documentURL)
+                                 documentURL: documentURL,
+                                 covered: showBreak || showCheckpoint)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -245,6 +264,7 @@ struct ReaderView: View {
             .foregroundStyle(theme.faint)
             .keyboardShortcut(.escape, modifiers: [])
             .help("Back to shelf")
+            .accessibilityLabel("Back to shelf")
 
             if !isCompact {
                 Text(book.title)
@@ -259,10 +279,14 @@ struct ReaderView: View {
                 sprintPill
             }
 
-            Picker("", selection: Binding(get: { settings.mode },
-                                          set: { settings.mode = $0; narrator.stop() })) {
+            Picker("Reading mode", selection: Binding(get: { settings.mode },
+                                                      set: { settings.mode = $0; narrator.stop() })) {
                 ForEach(ReadingMode.allCases) { mode in
-                    Image(systemName: mode.symbol).tag(mode)
+                    // VoiceOver read the symbol names ("align left",
+                    // "metronome"), never Cards, Flow and Pace.
+                    Image(systemName: mode.symbol)
+                        .accessibilityLabel(mode.label)
+                        .tag(mode)
                 }
             }
             .pickerStyle(.segmented)
@@ -278,6 +302,7 @@ struct ReaderView: View {
             .foregroundStyle(theme.faint)
             .keyboardShortcut("t", modifiers: .command)
             .help("Contents")
+            .accessibilityLabel("Contents")
             .tourAnchor(.contents)
 
             Button { showSettings = true } label: {
@@ -287,6 +312,7 @@ struct ReaderView: View {
             .buttonStyle(.plain)
             .foregroundStyle(theme.faint)
             .keyboardShortcut(",", modifiers: .command)
+            .accessibilityLabel("Text and reading settings")
             .tourAnchor(.settings)
         }
         .padding(.horizontal, 20)
@@ -362,6 +388,9 @@ struct ReaderView: View {
 
     private func advance() {
         guard let text else { return }
+        // The break screen asks the reader to look away. Nothing underneath
+        // may turn cards meanwhile.
+        guard !showBreak else { return }
         guard index < text.chunks.count - 1 else {
             Haptics.milestone(enabled: settings.hapticsEnabled)
             step(to: index)
@@ -542,17 +571,29 @@ struct ReaderView: View {
         return clamped
     }
 
+    /// The card size changed, so every card boundary moved. This used to land
+    /// on the first card of the page, which in an EPUB (where a page is a whole
+    /// chapter) meant the start of the chapter, and saved it over the real
+    /// place.
     private func reload() async {
-        let anchorPage = currentChunk?.page ?? 0
+        // A second change while the first is still parsing must not take its
+        // anchor from the empty reader in between, or it lands on card one.
+        if text != nil, let chunk = currentChunk {
+            reloadAnchor = ReloadAnchor(page: chunk.page, words: chunk.text)
+        }
+        reloadGeneration += 1
+        let generation = reloadGeneration
         text = nil
         loadProgress = 0
         do {
             let parsed = try await library.text(for: book, options: settings.chunkSize.options) { p in
                 loadProgress = p
             }
+            // A newer change is on its way; let it finish instead.
+            guard generation == reloadGeneration else { return }
             text = parsed
-            // Chunk indices changed under us; land on the same page instead.
-            index = parsed.chunks.firstIndex { $0.page >= anchorPage } ?? 0
+            index = reloadAnchor.map { $0.index(in: parsed) } ?? 0
+            resumedAt = nil
             persist()
         } catch {
             loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -564,5 +605,26 @@ struct ReaderView: View {
         sprint.pause()
         library.addReadingTime(bookID: book.id, seconds: sprint.drainReadingTime())
         library.saveNow()
+    }
+}
+
+/// Where the reader was, in words rather than a card number, so it survives
+/// the cards being cut differently.
+private struct ReloadAnchor {
+    let page: Int
+    let words: String
+
+    /// The new card holding the start of the old one, on the same page or the
+    /// next. Cards always break at sentences, so a bigger card contains the
+    /// old card's opening and a smaller one starts with it. The page start is
+    /// only the last resort.
+    func index(in parsed: BookText) -> Int {
+        let head = String(words.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        let near = { (chunk: Chunk) in abs(chunk.page - page) <= 1 }
+        if head.count > 12,
+           let match = parsed.chunks.firstIndex(where: { near($0) && $0.text.contains(head) }) {
+            return match
+        }
+        return parsed.chunks.firstIndex { $0.page >= page } ?? 0
     }
 }

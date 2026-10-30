@@ -119,6 +119,17 @@ struct RootView: View {
             openBook = guide
             return
         }
+        // Imports a file by path and opens it, e.g.
+        // `-debug.import /path/to/long.pdf`, so a long test book can be put
+        // on the shelf without the Files picker. If a book is already on the
+        // shelf it is opened instead, so relaunching never hits the free limit.
+        if let path = UserDefaults.standard.string(forKey: "debug.import") {
+            if let book = library.books.first(where: { !$0.isGuide })
+                ?? library.importPDF(from: URL(fileURLWithPath: path)) {
+                openBook = book
+                return
+            }
+        }
         #endif
 
         guard settings.openLastBookOnLaunch, openBook == nil else { return }
@@ -147,6 +158,11 @@ struct RootView: View {
                     startTour = false
                     openBook = nil
                 }
+                    // One reader per book. Without this, opening another book
+                    // while one was open (from Files, a link, or after buying)
+                    // kept the first book's cards on screen and saved its place
+                    // into the second.
+                    .id(book.id)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 1.02)),
                         removal: .opacity))

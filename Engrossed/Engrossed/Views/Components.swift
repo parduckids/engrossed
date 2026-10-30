@@ -152,3 +152,15 @@ struct CardContent: View {
         }
     }
 }
+
+/// Holds off the screen lock while words or a voice move on by themselves.
+/// Without it, Pace and read-aloud stopped every time Auto-Lock dimmed the
+/// phone, often after thirty seconds. Only ever on while something is playing,
+/// so ordinary reading still locks as normal.
+enum KeepAwake {
+    @MainActor static func set(_ on: Bool) {
+        #if os(iOS)
+        UIApplication.shared.isIdleTimerDisabled = on
+        #endif
+    }
+}

@@ -110,6 +110,9 @@ struct ChunkModeView: View {
         .onKeyPress(.leftArrow) { onBack(); return .handled }
         .onKeyPress(.upArrow) { onBack(); return .handled }
         .onChange(of: index) { _, _ in speakIfNeeded() }
+        // Read-aloud moves on by itself, so the screen must not lock under it.
+        .onChange(of: narrator.isSpeaking) { _, speaking in KeepAwake.set(speaking) }
+        .onDisappear { KeepAwake.set(false) }
         .onAppear {
             narrator.onFinish = {
                 if settings.speechEnabled { onAdvance() }
@@ -144,12 +147,18 @@ struct ChunkModeView: View {
             Button { onBack() } label: {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 12, weight: .medium))
+                    // The glyph stays small; the place to tap does not. A thumb
+                    // that missed a 13pt arrow landed on the card, which turns
+                    // the page forward: the opposite of what was meant.
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(theme.faint)
             .opacity(index > 0 ? 1 : 0.25)
             .disabled(index == 0)
             .help("Back a card")
+            .accessibilityLabel("Back a card")
 
             if settings.speechEnabled {
                 Button {
@@ -157,9 +166,12 @@ struct ChunkModeView: View {
                 } label: {
                     Image(systemName: narrator.isSpeaking ? "speaker.wave.2.fill" : "speaker")
                         .font(.system(size: 12))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(narrator.isSpeaking ? theme.accent : theme.faint)
+                .accessibilityLabel(narrator.isSpeaking ? "Stop reading aloud" : "Read this card aloud")
             }
 
             Spacer()

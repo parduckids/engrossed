@@ -16,6 +16,9 @@ struct PaceModeView: View {
     let onAdvance: () -> Void
     let onBack: () -> Void
     let documentURL: URL?
+    /// The break or a check-in is over the reader. Words must not keep
+    /// turning underneath it.
+    var covered: Bool = false
 
     @State private var wordIndex = 0
     @State private var isPlaying = false
@@ -35,6 +38,9 @@ struct PaceModeView: View {
                 // Nothing to pace through: a heading or a table is read by
                 // looking at it, not one word at a time.
                 CardContent(chunk: chunk, settings: settings, documentURL: documentURL)
+                    // Its own identity, or two pictures in a row share one
+                    // view and the second shows the first one's image.
+                    .id(chunk.id)
             } else {
                 wordWindow
                     .frame(height: settings.fontSize * 3.4)
@@ -55,6 +61,7 @@ struct PaceModeView: View {
         .onKeyPress(.leftArrow) { rewind(); return .handled }
         .onKeyPress(.rightArrow) { nextChunk(); return .handled }
         .onChange(of: index) { _, _ in wordIndex = 0 }
+        .onChange(of: covered) { _, isCovered in if isCovered { stop() } }
         .onDisappear { stop() }
         .onChange(of: scenePhase) { _, phase in
             // Otherwise the words keep turning over in a pocket, and the reader
@@ -71,9 +78,18 @@ struct PaceModeView: View {
         let head = String(word.prefix(pivot))
         let pivotChar = word.count > pivot ? String(Array(word)[pivot]) : ""
         let tail = word.count > pivot + 1 ? String(Array(word)[(pivot + 1)...]) : ""
-        let size = settings.fontSize * 1.75
+        let base = settings.fontSize * 1.75
 
-        return VStack(spacing: 0) {
+        return GeometryReader { geo in
+        // The pivot letter stays in the middle, so the longer half of the
+        // word has to fit in half the width. Long words ("neurotransmitters",
+        // "attention—and") used to be cut off with an ellipsis on a phone.
+        // Shrink just enough that they fit; a serif letter is under 0.6em.
+        let half = (min(geo.size.width, 560) - base * 0.6) / 2
+        let longest = CGFloat(max(head.count, tail.count, 1))
+        let size = min(base, max(base * 0.45, half / (longest * 0.6)))
+
+        VStack(spacing: 0) {
             // Fixation guides above and below the pivot column.
             Rectangle().fill(theme.ink.opacity(0.12)).frame(height: 1)
 
@@ -86,6 +102,7 @@ struct PaceModeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.system(size: size, weight: .medium, design: settings.font.design))
+            .lineLimit(1)
             .foregroundStyle(theme.ink)
             .padding(.vertical, 16)
             .frame(maxWidth: 560)
@@ -93,6 +110,8 @@ struct PaceModeView: View {
             Rectangle().fill(theme.ink.opacity(0.12)).frame(height: 1)
         }
         .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(theme.accent.opacity(0.35))
@@ -141,7 +160,10 @@ struct PaceModeView: View {
             HStack(spacing: 12) {
                 Button { rewind() } label: {
                     Image(systemName: "gobackward.10").font(.system(size: 15))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Back ten words")
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.faint)
                 .help("Back ten words")
@@ -155,10 +177,14 @@ struct PaceModeView: View {
                         .foregroundStyle(theme.onAccent)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isPlaying ? "Pause" : "Play")
 
                 Button { nextChunk() } label: {
                     Image(systemName: "forward.end.fill").font(.system(size: 13))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Skip to the next card")
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.faint)
                 .help("Skip to the next card")
@@ -196,14 +222,35 @@ struct PaceModeView: View {
     }
 
     private func play() {
-        guard !words.isEmpty else { return }
-        // Skip straight past anything that isn’t prose.
-        if let chunk, !chunk.isProse { onAdvance(); return }
+        // Play on a picture or a table means "I've looked, carry on": move past
+        // it, then keep playing. This used to sit behind a check for empty
+        // words, which a picture always has, so Play did nothing at all.
+        if let chunk, !chunk.isProse, chunk.kind != .heading {
+            let before = index
+            onAdvance()
+            guard index != before else { return }
+            wordIndex = 0
+        }
         isPlaying = true
+        KeepAwake.set(true)
         ticker?.cancel()
         ticker = Task { @MainActor in
             while !Task.isCancelled && isPlaying {
-                guard words.indices.contains(wordIndex) else { break }
+                if let chunk, !chunk.isProse {
+                    // A heading is glanced at and passed. A picture or a table
+                    // is something to look at, so playback pauses there and
+                    // the button says so, rather than stopping silently with
+                    // the pause icon still showing.
+                    guard chunk.kind == .heading else { stop(); break }
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    guard !Task.isCancelled, isPlaying else { break }
+                    let before = index
+                    onAdvance()
+                    guard index != before else { stop(); break }
+                    wordIndex = 0
+                    continue
+                }
+                guard words.indices.contains(wordIndex) else { stop(); break }
                 let base = 60.0 / max(60, settings.wordsPerMinute)
                 let dwell = base * TextStyling.dwellMultiplier(for: words[wordIndex])
                 try? await Task.sleep(nanoseconds: UInt64(dwell * 1_000_000_000))
@@ -223,7 +270,7 @@ struct PaceModeView: View {
                     // stays put, and so does a card whose checkpoint is now
                     // waiting for an answer. Without this the same words cycle
                     // forever, or race silently behind the checkpoint.
-                    guard index != before else { isPlaying = false; break }
+                    guard index != before else { stop(); break }
                     wordIndex = 0
                 }
             }
@@ -232,6 +279,7 @@ struct PaceModeView: View {
 
     private func stop() {
         isPlaying = false
+        KeepAwake.set(false)
         ticker?.cancel()
         ticker = nil
     }
