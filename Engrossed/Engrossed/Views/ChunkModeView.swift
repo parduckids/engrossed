@@ -57,7 +57,7 @@ struct ChunkModeView: View {
                     // both branches to measure them, and a figure card would
                     // render its bitmap twice.
                     Group {
-                        if chunk.figure == nil {
+                        if chunk.figure == nil && chunk.image == nil {
                             ViewThatFits(in: .vertical) {
                                 CardContent(chunk: chunk, settings: settings,
                                             documentURL: documentURL)
