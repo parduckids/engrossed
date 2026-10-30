@@ -4,9 +4,6 @@
  "published": "2026-10-31",
  "changes": [],
  "files": {
-  "fish-rules.json": {
-   "sha256": "b2d0456bedcd69339896c0aed1cffc4f6910fb5073682a86a4740890afc33293"
-  },
   "land-rules.json": {
    "sha256": "0def1e9669803bdc0a851bcb2ee3d7d44082bc9866458f433f71deffdbf7ec0f"
   }
