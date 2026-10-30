@@ -79,6 +79,24 @@ enum TextExtractor {
         var glyphHeight: CGFloat
         /// Every glyph box on the line, for tests the mode cannot answer.
         var heights: [CGFloat]
+        /// The runs of glyphs on the line, left to right, wherever they are
+        /// separated by far more than a word space. Empty for a line that is a
+        /// single run, which is nearly every line.
+        ///
+        /// A caption printed beside the text, the way a browser prints a
+        /// floated picture, sits at the same height as a line of the body and
+        /// is grouped into it. Keeping the runs apart is what lets the figure
+        /// finder take the caption back out, rather than leaving it spliced into
+        /// the middle of a sentence.
+        var pieces: [Piece] = []
+
+        /// The line's runs, or the whole line when it is one run.
+        var parts: [CGRect] { pieces.isEmpty ? [rect] : pieces.map(\.rect) }
+    }
+
+    private struct Piece {
+        var rect: CGRect
+        var heights: [CGFloat]
     }
 
     private struct Metrics {
@@ -114,8 +132,10 @@ enum TextExtractor {
         let documentWide = measure(pageLines)
         let furniture = furnitureLines(pageLines, in: document)
 
-        var result: [PageText] = []
-        result.reserveCapacity(count)
+        var bodies: [[Line]] = []
+        var furnitures: [[Line]] = []
+        bodies.reserveCapacity(count)
+        furnitures.reserveCapacity(count)
         for (i, lines) in pageLines.enumerated() {
             let page = document.page(at: i)
             // Page numbers are only page numbers when they sit at the edge of
@@ -140,17 +160,42 @@ enum TextExtractor {
                 let inMargin = line.rect.midY > box.maxY - band || line.rect.midY < box.minY + band
                 return inMargin || outermost.contains(line.rect.midY)
             }
-            let body = lines.filter { !isFurniture($0) }
-            let furnitureOnPage = lines.filter(isFurniture)
+            bodies.append(lines.filter { !isFurniture($0) })
+            furnitures.append(lines.filter(isFurniture))
+        }
+
+        // A page with no text of its own is shown as a picture: a plate, a
+        // chapter-opener illustration, a slide that is only an image. But when
+        // no page in the document has any text, it is a scan, and a book of
+        // several hundred picture cards would hide the one thing worth saying,
+        // which is that it needs OCR before it can be read. Leaving those pages
+        // empty keeps the library's "scanned PDF" message.
+        let hasText = bodies.contains { !$0.isEmpty }
+
+        var result: [PageText] = []
+        result.reserveCapacity(count)
+        for i in 0..<count {
+            let page = document.page(at: i)
+            let body = bodies[i]
+            let furnitureOnPage = furnitures[i]
             // Margins are measured per page. Books are printed with mirrored
             // margins — the inner edge swaps sides on facing pages — so a single
             // document-wide right margin is wrong for half the book, and every
             // full line on those pages looks short enough to end a paragraph.
             let metrics = pageMetrics(for: body, fallback: documentWide)
-            let area = page.map { bodyArea(of: $0, furniture: furnitureOnPage) } ?? .null
+            var area = CGRect.null
+            if let page {
+                // A plate with nothing printed around it often bleeds to the
+                // edge, and the usual margin would cut its top and bottom off.
+                area = body.isEmpty && furnitureOnPage.isEmpty
+                    ? page.bounds(for: .mediaBox)
+                    : bodyArea(of: page, furniture: furnitureOnPage)
+            }
             result.append(PageText(pageIndex: i,
-                                   blocks: blocks(from: body, metrics: metrics,
-                                                  page: page, contentArea: area)))
+                                   blocks: blocks(from: body, furniture: furnitureOnPage,
+                                                  metrics: metrics, documentWide: documentWide,
+                                                  page: page, contentArea: area,
+                                                  picturesAlone: hasText)))
             progress?(0.8 + Double(i + 1) / Double(count) * 0.2)
         }
         return result
@@ -170,10 +215,14 @@ enum TextExtractor {
         struct Row {
             var rect: CGRect
             var heights: [CGFloat]
+            /// Kept only while the page is being read, to find the wide gaps
+            /// that separate a line's pieces. `heights` is parallel to it.
+            var glyphs: [CGRect]
 
             mutating func absorb(_ other: Row) {
                 rect = rect.union(other.rect)
                 heights.append(contentsOf: other.heights)
+                glyphs.append(contentsOf: other.glyphs)
             }
         }
 
@@ -183,7 +232,7 @@ enum TextExtractor {
         for i in 0..<charCount {
             let bounds = page.characterBounds(at: i)
             guard bounds.height > 0.5, bounds.width.isFinite, bounds.origin.y.isFinite else { continue }
-            let glyph = Row(rect: bounds, heights: [bounds.height])
+            let glyph = Row(rect: bounds, heights: [bounds.height], glyphs: [bounds])
             if let last = rows.last, sharesLine(last.rect, bounds) {
                 rows[rows.count - 1].absorb(glyph)
             } else {
@@ -205,22 +254,65 @@ enum TextExtractor {
         rows = merged
 
         let result: [Line] = rows.compactMap { row in
-            let rect = row.rect
-            // A slight outset stops the selection from clipping ascenders and
-            // the first glyph of the line. The right edge is given a whole
-            // character of room: a mark that ends a line, an ideographic full
-            // stop in particular, sits right on the boundary and is otherwise
-            // left out, so the sentence loses the thing that ends it.
-            var probe = rect.insetBy(dx: -1.5, dy: -1.5)
-            probe.size.width += rect.height
-            guard let raw = page.selection(for: probe)?.string else { return nil }
-            let text = collapseWhitespace(raw)
-            guard !text.isEmpty else { return nil }
-            return Line(rect: rect, text: text,
-                        glyphHeight: modalHeight(row.heights), heights: row.heights)
+            guard let text = selectedText(in: row.rect, of: page) else { return nil }
+            return Line(rect: row.rect, text: text,
+                        glyphHeight: modalHeight(row.heights), heights: row.heights,
+                        pieces: pieces(of: row.glyphs))
         }
 
         return result.isEmpty ? fallbackLines(of: page) : result
+    }
+
+    /// The text PDFKit selects inside a box on the page.
+    ///
+    /// A slight outset stops the selection from clipping ascenders and the
+    /// first glyph of the line. The right edge is given a whole character of
+    /// room: a mark that ends a line, an ideographic full stop in particular,
+    /// sits right on the boundary and is otherwise left out, so the sentence
+    /// loses the thing that ends it. `reach` caps that room when something
+    /// that is not part of this text starts just to the right of it.
+    private static func selectedText(in rect: CGRect, of page: PDFPage,
+                                     reach: CGFloat? = nil) -> String? {
+        var probe = rect.insetBy(dx: -1.5, dy: -1.5)
+        probe.size.width += max(0, min(rect.height, reach ?? rect.height))
+        guard let raw = page.selection(for: probe)?.string else { return nil }
+        let text = collapseWhitespace(raw)
+        return text.isEmpty ? nil : text
+    }
+
+    /// Splits a line's glyphs wherever the gap between them is far wider than
+    /// any word space, or returns nothing when the line is one run.
+    ///
+    /// The bar is about two and a half x-heights, which is wider than the
+    /// loosest justified word space and narrower than the gutter between a
+    /// column of text and a picture set beside it. A split costs nothing on its
+    /// own: the line is still read as one line, and the pieces only matter
+    /// once a picture has been found next to them.
+    private static func pieces(of glyphs: [CGRect]) -> [Piece] {
+        guard glyphs.count > 1 else { return [] }
+        let limit = max(modalHeight(glyphs.map(\.height)) * 2.5, 11)
+        // A box far wider than it is tall is not a letter. PDFKit hands back
+        // the space it puts between two runs of text as one that spans the
+        // whole gap, and the last glyph of a justified line can carry the
+        // line's slack, either of which would bridge the very gap being looked
+        // for.
+        let ordered = glyphs.filter { $0.width <= max($0.height * 2, 12) }
+            .sorted { $0.minX < $1.minX }
+        guard ordered.count > 1 else { return [] }
+
+        var result: [Piece] = []
+        var current = Piece(rect: ordered[0], heights: [ordered[0].height])
+        for glyph in ordered.dropFirst() {
+            if glyph.minX - current.rect.maxX > limit {
+                result.append(current)
+                current = Piece(rect: glyph, heights: [glyph.height])
+            } else {
+                current.rect = current.rect.union(glyph)
+                current.heights.append(glyph.height)
+            }
+        }
+        result.append(current)
+        return result.count > 1 ? result : []
     }
 
     /// Two boxes belong to the same line when their vertical extents overlap for
@@ -437,27 +529,70 @@ enum TextExtractor {
 
     // MARK: - Paragraphs
 
-    private static func blocks(from lines: [Line], metrics: Metrics,
-                               page: PDFPage?, contentArea: CGRect) -> [Block] {
-        guard !lines.isEmpty else { return [] }
+    /// - Parameter picturesAlone: whether a page with no text of its own may
+    ///   still be shown as a picture. False for a document with no text at
+    ///   all, which is a scan.
+    private static func blocks(from lines: [Line], furniture: [Line], metrics: Metrics,
+                               documentWide: Metrics, page: PDFPage?, contentArea: CGRect,
+                               picturesAlone: Bool) -> [Block] {
+        var lines = lines
+        var figures: [Figure] = []
+        // Lines synthesised from plain text have no real geometry, so there is
+        // nothing to measure a picture against.
+        let measured = !lines.contains { $0.heights.isEmpty }
+        if let page, !contentArea.isNull, measured, picturesAlone || !lines.isEmpty {
+            figures = findFigures(on: page, lines: &lines, furniture: furniture,
+                                  metrics: metrics, documentWide: documentWide,
+                                  contentArea: contentArea)
+        }
+        guard !lines.isEmpty else { return figures.map { .figure($0.rect) } }
 
         var blocks: [Block] = []
+        // Where each block starts on the page: the top of its first line, or
+        // nil for a figure. A picture set beside the text has no gap of its own
+        // in the flow, and this is how it finds the paragraph break to sit at.
+        var tops: [CGFloat?] = []
         var current = ""
         var currentIsHeading = false
+        var currentTop: CGFloat = 0
         // The left edge of the paragraph being built. Indents are judged against
         // this rather than the page margin, so an abstract or a block quote —
         // indented on every line — isn’t read as one paragraph per line.
         var blockLeft = CGFloat.greatestFiniteMagnitude
+        var placed = Array(repeating: false, count: figures.count)
 
         func flush() {
             let trimmed = strippingFootnoteMarkers(current)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.count > 1 {
                 blocks.append(currentIsHeading ? .heading(trimmed) : .paragraph(trimmed))
+                tops.append(currentTop)
             }
             current = ""
             currentIsHeading = false
             blockLeft = .greatestFiniteMagnitude
+        }
+
+        func place(_ chosen: [Int]) {
+            for k in chosen.sorted(by: { figures[$0].rect.maxY > figures[$1].rect.maxY }) {
+                blocks.append(.figure(figures[k].rect))
+                tops.append(nil)
+                placed[k] = true
+            }
+        }
+
+        // A figure sitting in the gap between two lines goes in at that gap.
+        // It has to overlap them horizontally as well: on a page set in two
+        // columns, a picture in the right-hand one lies level with a gap in the
+        // left-hand one too, and that is no place to break a paragraph.
+        func waiting(between above: Line, and below: Line) -> [Int] {
+            figures.indices.filter { k in
+                let rect = figures[k].rect
+                guard !placed[k], !figures[k].isFloat,
+                      rect.midY < above.rect.midY, rect.midY > below.rect.midY else { return false }
+                return rect.minX < max(above.rect.maxX, below.rect.maxX)
+                    && rect.maxX > min(above.rect.minX, below.rect.minX)
+            }
         }
 
         // A title is set in a larger font than the text it introduces, and that
@@ -523,15 +658,18 @@ enum TextExtractor {
             return !(text.first(where: \.isLetter)?.isLowercase ?? false)
         }
 
+        // A figure can sit above the first line.
+        place(figures.indices.filter { k in
+            !figures[k].isFloat && figures[k].rect.midY > lines[0].rect.maxY
+        })
+
         for (i, line) in lines.enumerated() {
             let heading = isHeadingLine(at: i)
             if i > 0 {
-                // A tall empty band between two lines is where a figure lives.
-                if let figure = figureRegion(above: line, below: lines[i - 1],
-                                             metrics: metrics, page: page,
-                                             contentArea: contentArea) {
+                let between = waiting(between: lines[i - 1], and: line)
+                if !between.isEmpty {
                     flush()
-                    blocks.append(.figure(figure))
+                    place(between)
                 } else if heading != currentIsHeading
                             || startsNewParagraph(previous: lines[i - 1],
                                                   current: line,
@@ -545,54 +683,48 @@ enum TextExtractor {
                     flush()
                 }
             }
-            if current.isEmpty { currentIsHeading = heading }
+            if current.isEmpty {
+                currentIsHeading = heading
+                currentTop = line.rect.maxY
+            }
             append(line.text, to: &current)
             blockLeft = min(blockLeft, line.rect.minX)
         }
         flush()
 
-        // A figure can also sit above the first line or below the last one.
-        if let page, let first = lines.first, let last = lines.last, !contentArea.isNull {
-            if let top = inkedRegion(CGRect(x: metrics.bodyLeft, y: first.rect.maxY,
-                                            width: metrics.bodyWidth,
-                                            height: contentArea.maxY - first.rect.maxY),
-                                     metrics: metrics, page: page, contentArea: contentArea) {
-                blocks.insert(.figure(top), at: 0)
-            }
-            if let bottom = inkedRegion(CGRect(x: metrics.bodyLeft, y: contentArea.minY,
-                                               width: metrics.bodyWidth,
-                                               height: last.rect.minY - contentArea.minY),
-                                        metrics: metrics, page: page, contentArea: contentArea) {
-                blocks.append(.figure(bottom))
-            }
+        // A figure can sit below the last line.
+        if let last = lines.last {
+            place(figures.indices.filter { k in
+                !placed[k] && !figures[k].isFloat && figures[k].rect.midY < last.rect.minY
+            })
         }
-        return mergingOverlappingFigures(blocks)
-    }
 
-    /// A figure with labels inside it produces several candidate bands — one for
-    /// each gap between its own text — which then overlap almost entirely. Fold
-    /// those back into a single picture.
-    private static func mergingOverlappingFigures(_ blocks: [Block]) -> [Block] {
-        var result: [Block] = []
-
-        for block in blocks {
-            guard case .figure(let rect) = block else {
-                result.append(block)
-                continue
+        // Everything else, a picture set beside the text above all, goes in at
+        // the first paragraph that starts level with its top or below it, so it
+        // sits next to the text it was printed next to without ever breaking a
+        // sentence in two. Taken from the top down, so two pictures that land
+        // at the same break keep the order they have on the page.
+        //
+        // Never ahead of the page's first paragraph, nor behind an unfinished
+        // last one: those are how a sentence carries over from one page to the
+        // next, and the chunker can only join the two halves when nothing
+        // stands between them.
+        let rest = figures.indices.filter { !placed[$0] }
+            .sorted { figures[$0].rect.maxY > figures[$1].rect.maxY }
+        for k in rest {
+            let reach = figures[k].rect.maxY + metrics.lineGap * 0.5
+            let first = tops.firstIndex { $0 != nil } ?? 0
+            var at = tops.indices.first { i in
+                i > first && (tops[i].map { $0 <= reach } ?? false)
+            } ?? blocks.count
+            if at == blocks.count, let last = blocks.indices.last, last > first,
+               case .paragraph(let text) = blocks[last], !endsSentence(text) {
+                at = last
             }
-
-            let existing = result.lastIndex { item in
-                if case .figure(let other) = item { return overlapFraction(rect, other) > 0.3 }
-                return false
-            }
-
-            if let existing, case .figure(let other) = result[existing] {
-                result[existing] = .figure(rect.union(other))
-            } else {
-                result.append(block)
-            }
+            blocks.insert(.figure(figures[k].rect), at: at)
+            tops.insert(nil, at: at)
         }
-        return result
+        return blocks
     }
 
     private static func overlapFraction(_ a: CGRect, _ b: CGRect) -> CGFloat {
@@ -618,6 +750,12 @@ enum TextExtractor {
         var bottom = box.minY
 
         for line in furniture {
+            // Only what sits out towards the edges. A lone number anywhere on
+            // the page has the same shape as a page number and is set aside
+            // with them, and a tick on a chart's axis taken as the bottom of
+            // the body would cut the chart, and everything under it, off.
+            let fromEdge = min(line.rect.midY - box.minY, box.maxY - line.rect.midY)
+            guard fromEdge < box.height * 0.2 else { continue }
             if line.rect.midY > middle {
                 top = min(top, line.rect.minY - 3)
             } else {
@@ -632,113 +770,643 @@ enum TextExtractor {
         return CGRect(x: box.minX, y: bottom, width: box.width, height: top - bottom)
     }
 
-    private static func figureRegion(above current: Line, below previous: Line,
-                                     metrics: Metrics, page: PDFPage?,
-                                     contentArea: CGRect) -> CGRect? {
-        guard let page else { return nil }
-        // PDF y grows upward and lines arrive top-to-bottom, so the previous
-        // line’s bottom edge is the top of the gap.
-        let gapTop = previous.rect.minY
-        let gapBottom = current.rect.maxY
-        guard gapTop > gapBottom else { return nil }
-        let gap = CGRect(x: metrics.bodyLeft, y: gapBottom,
-                         width: metrics.bodyWidth, height: gapTop - gapBottom)
-        return inkedRegion(gap, metrics: metrics, page: page, contentArea: contentArea)
+    /// A picture found on a page, in the page’s own coordinate space.
+    private struct Figure {
+        var rect: CGRect
+        /// Set beside the text rather than between its lines, the way a picture
+        /// floated to one side of a column is. It has no gap of its own in the
+        /// flow, so it goes in at the nearest paragraph break instead.
+        var isFloat: Bool
     }
 
-    /// Accepts a band only if it is big enough to be worth showing and actually
-    /// has something drawn in it. Plenty of tall gaps are just white space, and a
-    /// card containing a picture of nothing is worse than no card at all.
-    private static func inkedRegion(_ rect: CGRect, metrics: Metrics,
-                                    page: PDFPage, contentArea: CGRect) -> CGRect? {
-        // Bounded as well as finite. Nothing rejects an absurd media box — a
-        // page can declare itself 1e20 points tall and PDFKit reports it back
-        // verbatim — and a figure region taken from one traps every later
-        // attempt to scale it.
-        guard rect.height.isFinite, rect.width.isFinite,
-              rect.width < 20_000, rect.height < 20_000 else { return nil }
-
-        // Clip to the body area *first*, for two reasons: a running head sitting
-        // just above a figure would otherwise be baked into the picture, and
-        // probing the raw band then clipping afterwards passes the ink test on
-        // text that is then cropped away — leaving one-point slivers where a
-        // figure was meant to be.
-        let clip = contentArea.isNull ? page.bounds(for: .mediaBox) : contentArea
-        let bounded = rect.intersection(clip)
-        let minimumHeight = max(metrics.lineGap * 3.2, 58)
-        guard !bounded.isNull, bounded.height >= minimumHeight, bounded.width > 40
-        else { return nil }
-
-        // Look for ink strictly *between* the lines. Character bounds don’t
-        // always cover a glyph’s full extent, so a band measured right up to the
-        // text edge catches the tops of letters, and every paragraph gap in the
-        // book gets reported as a picture.
-        let probe = bounded.insetBy(dx: 2, dy: 7)
-        guard probe.height > 24, let ink = inkBounds(in: probe, of: page) else { return nil }
-
-        // Trim to what was actually drawn, with a little air around it.
-        let trimmed = ink.insetBy(dx: -6, dy: -6).intersection(bounded)
-        guard !trimmed.isNull, trimmed.height >= minimumHeight * 0.55 else { return nil }
-        return trimmed
+    /// What a line of text is, as far as finding pictures goes.
+    private enum Role {
+        /// Short and unfinished: a tick on an axis, a legend, a place name on a
+        /// map. Text like this inside a drawing, or right against it, is part
+        /// of the drawing.
+        case label
+        /// Anything that reads as sentences. A picture does not contain prose,
+        /// so prose over ink means a tinted box or a page background.
+        case prose
+        /// Set larger than the body. Never taken into a picture, so a chapter
+        /// title printed over an illustration still reaches the contents.
+        case title
     }
 
-    /// Renders the band small and returns the bounding box of whatever was
-    /// drawn in it, in page coordinates — or nil if there was essentially
-    /// nothing there.
+    private static func role(of line: Line, metrics: Metrics) -> Role {
+        let text = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if metrics.bodyHeight > 0.5, line.glyphHeight > metrics.bodyHeight * 1.10,
+           text.contains(where: \.isLetter), Chunker.letterDensity(text) >= 0.62 {
+            return .title
+        }
+        if endsSentence(text) || Chunker.wordCount(text) > 8 { return .prose }
+        return .label
+    }
+
+    /// Finds the pictures on a page, and takes out of `lines` the text that
+    /// belongs to them: the labels inside a chart, the ticks along its axes,
+    /// the caption of a picture printed beside the text.
     ///
-    /// The bounding box matters as much as the yes/no: the gap between two
-    /// paragraphs is usually much taller than the picture sitting in it, and a
-    /// card padded out with half a page of white space looks broken.
-    private static func inkBounds(in rect: CGRect, of page: PDFPage) -> CGRect? {
-        let width = 96
-        // Clamp in floating point, before the conversion. Int(_: Double) traps
-        // on anything past Int.max rather than saturating, so clamping the Int
-        // afterwards never runs — and the number that gets there is only a
-        // number in a file someone downloaded.
-        let rows = Double(width) * rect.height / max(rect.width, 1)
-        guard rows.isFinite, rows > 0 else { return nil }
-        let height = max(8, Int(min(rows, 2000)))
-        guard let context = CGContext(data: nil, width: width, height: height,
-                                      bitsPerComponent: 8, bytesPerRow: width,
-                                      space: CGColorSpaceCreateDeviceGray(),
-                                      bitmapInfo: CGImageAlphaInfo.none.rawValue)
-        else { return nil }
+    /// The page is drawn once, small, with every line of text painted out, so
+    /// what remains is ink that is not text. That is gathered into blobs, and a
+    /// blob that is big enough and solid enough is a picture wherever it sits:
+    /// between paragraphs, beside a column, or alone on the page.
+    ///
+    /// Looking only in the vertical gaps between one line and the next, as this
+    /// used to, missed three things. A chart with labels in it is cut into
+    /// slivers by its own text, none of them tall enough to count. A picture
+    /// beside the text leaves no gap at all. And a page that is only a picture
+    /// has no lines to look between.
+    private static func findFigures(on page: PDFPage, lines: inout [Line], furniture: [Line],
+                                    metrics: Metrics, documentWide: Metrics,
+                                    contentArea: CGRect) -> [Figure] {
+        let alone = lines.isEmpty
 
-        context.setFillColor(gray: 1, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.saveGState()
-        context.scaleBy(x: CGFloat(width) / rect.width, y: CGFloat(height) / rect.height)
-        context.translateBy(x: -rect.minX, y: -rect.minY)
-        page.draw(with: .mediaBox, to: context)
-        context.restoreGState()
+        // Every run of text on the page, and the line it belongs to.
+        struct Part {
+            let line: Int
+            let rect: CGRect
+        }
+        var parts: [Part] = []
+        var firstPart: [Int] = []
+        for (i, line) in lines.enumerated() {
+            firstPart.append(parts.count)
+            for rect in line.parts { parts.append(Part(line: i, rect: rect)) }
+        }
+        let roles = lines.map { role(of: $0, metrics: metrics) }
 
-        guard let data = context.data else { return nil }
-        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height)
+        // Where to look. With text on the page, across the text block and a
+        // little either side, so a thumb tab or a scanner's shadow in the
+        // margin is never taken for a picture. Without, the whole content area.
+        var area = contentArea
+        var textWidth = contentArea.width
+        if !alone {
+            let left = min(parts.map(\.rect.minX).min() ?? metrics.bodyLeft,
+                           metrics.bodyLeft, documentWide.bodyLeft)
+            let right = max(parts.map(\.rect.maxX).max() ?? metrics.bodyRight,
+                            metrics.bodyRight, documentWide.bodyRight)
+            textWidth = max(1, right - left)
+            area = CGRect(x: left - textWidth * 0.04, y: contentArea.minY,
+                          width: textWidth * 1.08, height: contentArea.height)
+                .intersection(contentArea)
+        }
+        let masks = parts.map(\.rect) + furniture.flatMap(\.parts)
+        guard let ink = InkMap(page: page, area: area, masking: masks) else { return [] }
 
-        var dark = 0
-        var minCol = width, maxCol = -1, minRow = height, maxRow = -1
-        for row in 0..<height {
-            for column in 0..<width where pixels[row * width + column] < 235 {
-                dark += 1
-                if column < minCol { minCol = column }
-                if column > maxCol { maxCol = column }
-                if row < minRow { minRow = row }
-                if row > maxRow { maxRow = row }
+        let lineGap = max(metrics.lineGap, 1)
+        let minimumHeight = max(lineGap * 3.2, 58)
+
+        func covered(_ a: CGRect, _ b: CGRect) -> CGFloat {
+            let shared = a.intersection(b)
+            return shared.isNull ? 0 : shared.width * shared.height
+        }
+        func isInside(_ part: Part, _ rect: CGRect) -> Bool {
+            covered(part.rect, rect) >= part.rect.width * part.rect.height * 0.6
+        }
+        // The share of a rectangle taken up by text. A drawing carries a few
+        // labels; a box this full of text is text with a tint behind it.
+        func textCover(_ rect: CGRect) -> CGFloat {
+            let size = rect.width * rect.height
+            guard size > 0 else { return 0 }
+            return parts.filter { isInside($0, rect) }
+                .reduce(0) { $0 + covered($1.rect, rect) } / size
+        }
+        func distance(_ a: CGRect, _ b: CGRect) -> CGFloat {
+            max(0, b.minX - a.maxX, a.minX - b.maxX, b.minY - a.maxY, a.minY - b.maxY)
+        }
+        // How many runs of text sit level with a rectangle, off to one side.
+        func besideCount(_ rect: CGRect, _ ids: [Int]) -> Int {
+            ids.filter { k in
+                let r = parts[k].rect
+                let level = min(r.maxY, rect.maxY) - max(r.minY, rect.minY)
+                let across = min(r.maxX, rect.maxX) - max(r.minX, rect.minX)
+                return level >= r.height * 0.5 && across <= 0
+            }.count
+        }
+        // The caption under a picture: at most four lines, each inside the
+        // picture's width, close under it and under one another. A longer run
+        // is the text of a column, not a caption, and is left alone.
+        //
+        // A caption printed beside the text shares its row with a line of the
+        // body, across the gutter. A row that carries on just to the side of
+        // the picture instead, as the rows of a table under it do, ends the
+        // caption there.
+        func caption(below rect: CGRect, among ids: [Int]) -> [Int] {
+            func within(_ r: CGRect) -> Bool { r.minX >= rect.minX - 6 && r.maxX <= rect.maxX + 6 }
+            let candidates = ids.filter { k in
+                within(parts[k].rect) && parts[k].rect.maxY <= rect.minY + 2
+            }.sorted { parts[$0].rect.maxY > parts[$1].rect.maxY }
+            var run: [Int] = []
+            var rows: [CGFloat] = []
+            var edge = rect.minY
+            for k in candidates {
+                let r = parts[k].rect
+                guard edge - r.maxY <= lineGap * 1.3 else { break }
+                let line = parts[k].line
+                let crowded = (firstPart[line]..<firstPart[line] + lines[line].parts.count).contains { j in
+                    let other = parts[j].rect
+                    return !within(other) && other.maxX > rect.minX - 8 && other.minX < rect.maxX + 8
+                }
+                guard !crowded else { break }
+                run.append(k)
+                if !rows.contains(where: { abs($0 - r.midY) < lineGap * 0.5 }) { rows.append(r.midY) }
+                edge = min(edge, r.minY)
+            }
+            return rows.count <= 4 ? run : []
+        }
+        // Whether a label sits right against a drawing: tick labels beside an
+        // axis or under it, a legend, an axis title. Numbers may hang a little
+        // further off than words, since a word that far below a picture is as
+        // likely to be the first line of the text.
+        func adjoins(_ line: Line, _ rect: CGRect) -> Bool {
+            let r = line.rect
+            let across = min(r.maxX, rect.maxX) - max(r.minX, rect.minX)
+            let level = min(r.maxY, rect.maxY) - max(r.minY, rect.minY)
+            let vertical = max(rect.minY - r.maxY, r.minY - rect.maxY)
+            let horizontal = max(rect.minX - r.maxX, r.minX - rect.maxX)
+            let numeric = Chunker.letterDensity(line.text) < 0.62
+            if across >= r.width * 0.5, vertical <= lineGap * (numeric ? 1.0 : 0.6) { return true }
+            return level >= r.height * 0.5 && horizontal <= lineGap * (numeric ? 1.6 : 1.0)
+                && r.width <= textWidth * 0.25
+        }
+
+        // Blobs that make one picture are joined: the bars of a chart drawn
+        // without axes, a legend beside its plot, a row of photographs. They
+        // are never joined across prose or a title, which is what stops a
+        // picture beside a column from swallowing the column; nor to a closed
+        // frame, which would wrap everything inside it, captions included,
+        // into one picture; nor into a box that is mostly text.
+        var groups: [[Int]] = []
+        var rects: [CGRect] = []
+        for (b, blob) in ink.blobs.enumerated() where blob.count >= 3 {
+            let rect = ink.rect(of: blob)
+            if !alone, !blob.hollow, textCover(rect) >= 0.18 { continue }
+            groups.append([b])
+            rects.append(rect)
+        }
+        if groups.count > 120 {
+            // A page of speckle. Only the biggest blobs can be pictures anyway.
+            let keep = groups.indices.sorted { ink.blobs[groups[$0][0]].count > ink.blobs[groups[$1][0]].count }
+                .prefix(120)
+            groups = keep.map { groups[$0] }
+            rects = keep.map { rects[$0] }
+        }
+        func blocked(_ rect: CGRect) -> Bool {
+            parts.contains { roles[$0.line] != .label && isInside($0, rect) }
+        }
+        func framed(_ group: [Int]) -> Bool {
+            group.count == 1 && ink.blobs[group[0]].hollow && ink.blobs[group[0]].closed
+        }
+        var joined = true
+        while joined {
+            joined = false
+            var a = 0
+            while a < groups.count {
+                var b = a + 1
+                while b < groups.count {
+                    let union = rects[a].union(rects[b])
+                    let join = alone || (distance(rects[a], rects[b]) <= lineGap * 2
+                                         && !framed(groups[a]) && !framed(groups[b])
+                                         && !blocked(union) && textCover(union) < 0.18)
+                    if join {
+                        groups[a] += groups[b]
+                        rects[a] = union
+                        groups.remove(at: b)
+                        rects.remove(at: b)
+                        joined = true
+                    } else {
+                        b += 1
+                    }
+                }
+                a += 1
             }
         }
 
-        // A few stray pixels are compression noise; a real figure covers ground.
-        guard maxCol >= minCol, maxRow >= minRow,
-              Double(dark) / Double(width * height) > 0.02 else { return nil }
+        var taken = Set<Int>()
+        var figures: [Figure] = []
+        for g in groups.indices.sorted(by: { rects[$0].maxY > rects[$1].maxY }) {
+            let stats = ink.stats(of: groups[g])
+            let drawn = stats.rect
+            // The drawing itself has to be the size a figure has always had to
+            // be. Labels taken in below can make it bigger, never big enough.
+            guard drawn.height >= minimumHeight * 0.55, drawn.width > 40, stats.count >= 12
+            else { continue }
+            let free = parts.indices.filter { !taken.contains($0) }
+            let within = free.filter { isInside(parts[$0], drawn.insetBy(dx: -2, dy: -2)) }
 
-        let pixelWidth = rect.width / CGFloat(width)
-        let pixelHeight = rect.height / CGFloat(height)
-        // A bitmap context stores its first row at the top, while page
-        // coordinates count upward from the bottom.
-        return CGRect(x: rect.minX + CGFloat(minCol) * pixelWidth,
-                      y: rect.maxY - CGFloat(maxRow + 1) * pixelHeight,
-                      width: CGFloat(maxCol - minCol + 1) * pixelWidth,
-                      height: CGFloat(maxRow - minRow + 1) * pixelHeight)
+            // Rules are no picture: an empty frame, the lines of a table.
+            if stats.hollow {
+                // An empty frame beside the text is a picture that never
+                // printed: a web page saved before its images had loaded is
+                // full of them. There is nothing to show, but its caption still
+                // has to come out of the sentence it was printed beside. Its
+                // outline is often so light that only two sides count as ink,
+                // so rules running the full height and the full width of the
+                // box are taken as enough of a frame.
+                if !alone, within.isEmpty, stats.interiorInk <= 2,
+                   stats.rows >= 0.9, stats.columns >= 0.9,
+                   besideCount(drawn, free) >= 2 {
+                    taken.formUnion(caption(below: drawn, among: free))
+                }
+                continue
+            }
+            // Nor is ink that reaches across only a sliver of its own box, which
+            // is what a few stray marks a long way apart look like.
+            guard stats.rows >= 0.25, stats.columns >= 0.25 else { continue }
+            // Nor is ink with prose over it.
+            let prose = within.filter { roles[parts[$0].line] == .prose }
+            guard prose.count < 3, textCover(drawn) < 0.18 else { continue }
+
+            var rect = drawn
+            var claimed = Set(within.filter { roles[parts[$0].line] != .title })
+            for k in claimed { rect = rect.union(parts[k].rect) }
+
+            // Labels just outside the drawing are part of it. A few rounds, so
+            // an axis title under a row of tick labels comes along too; past
+            // the first, only something as short as an axis title, so a stack
+            // of short lines under a picture is not reeled in one at a time.
+            for round in 0..<3 {
+                var grew = false
+                for i in lines.indices where roles[i] == .label {
+                    let ids = firstPart[i]..<firstPart[i] + lines[i].parts.count
+                    guard ids.allSatisfy({ !taken.contains($0) && !claimed.contains($0) }),
+                          round == 0 || lines[i].rect.width <= drawn.width * 0.4,
+                          adjoins(lines[i], rect) else { continue }
+                    claimed.formUnion(ids)
+                    rect = rect.union(lines[i].rect)
+                    grew = true
+                }
+                if !grew { break }
+            }
+
+            let isFloat = !alone && besideCount(rect, free.filter { !claimed.contains($0) }) >= 2
+            if isFloat {
+                // Beside the text a picture has to be a real one. A drop cap or
+                // an icon by a note is ink beside text too.
+                guard drawn.height >= minimumHeight * 0.8,
+                      drawn.width >= max(40, textWidth * 0.12) else { continue }
+                let below = caption(below: rect, among: free.filter { !claimed.contains($0) })
+                claimed.formUnion(below)
+                for k in below { rect = rect.union(parts[k].rect) }
+            }
+            guard rect.height >= minimumHeight * 0.55, rect.width > 40 else { continue }
+
+            // Text that stays text has to stay outside the picture. A line that
+            // runs right through it means this was never a picture: the bullets
+            // down the side of a list, say, lined up into something the size of
+            // one. A title is the exception, since it is allowed to sit on top.
+            let standing = free.filter { !claimed.contains($0) && roles[parts[$0].line] != .title }
+            let crossed = standing.contains { k in
+                let shared = parts[k].rect.intersection(rect)
+                return !shared.isNull && shared.width >= 6
+                    && shared.height >= parts[k].rect.height * 0.5
+            }
+            guard !crossed else { continue }
+
+            // A little air around it, but never over text that stays text.
+            rect = rect.insetBy(dx: -4, dy: -4).intersection(area)
+            for k in standing {
+                let r = parts[k].rect
+                guard !rect.isNull, r.intersects(rect),
+                      min(r.maxX, rect.maxX) - max(r.minX, rect.minX) > r.width * 0.3 else { continue }
+                if r.midY > rect.midY {
+                    rect.size.height = max(0, r.minY - 1 - rect.minY)
+                } else {
+                    let top = rect.maxY
+                    rect.origin.y = r.maxY + 1
+                    rect.size.height = max(0, top - rect.origin.y)
+                }
+            }
+            guard !rect.isNull, rect.height >= minimumHeight * 0.5 else { continue }
+            taken.formUnion(claimed)
+            figures.append(Figure(rect: rect, isFloat: isFloat))
+        }
+
+        // Two finds that overlap are one picture.
+        var merged: [Figure] = []
+        for figure in figures {
+            if let k = merged.firstIndex(where: { overlapFraction($0.rect, figure.rect) > 0.3 }) {
+                merged[k].rect = merged[k].rect.union(figure.rect)
+                merged[k].isFloat = merged[k].isFloat || figure.isFloat
+            } else {
+                merged.append(figure)
+            }
+        }
+
+        // Take what the pictures claimed out of the text. A line that keeps
+        // some of its pieces is read again piece by piece, so none of what was
+        // taken comes back with it.
+        if !taken.isEmpty {
+            lines = lines.enumerated().compactMap { i, line in
+                let kept = line.parts.indices.filter { !taken.contains(firstPart[i] + $0) }
+                if kept.count == line.parts.count { return line }
+                guard !kept.isEmpty, !line.pieces.isEmpty else { return nil }
+                let pieces = kept.map { line.pieces[$0] }
+                let texts: [String] = kept.compactMap { k in
+                    let piece = line.pieces[k]
+                    let reach = k + 1 < line.pieces.count
+                        ? line.pieces[k + 1].rect.minX - piece.rect.maxX - 3 : nil
+                    return selectedText(in: piece.rect, of: page, reach: reach)
+                }
+                guard !texts.isEmpty else { return nil }
+                let heights = pieces.flatMap(\.heights)
+                return Line(rect: pieces.dropFirst().reduce(pieces[0].rect) { $0.union($1.rect) },
+                            text: texts.joined(separator: " "),
+                            glyphHeight: modalHeight(heights), heights: heights,
+                            pieces: pieces.count > 1 ? pieces : [])
+            }
+        }
+        return merged
+    }
+
+    /// The ink on part of a page that is not text, drawn small.
+    private struct InkMap {
+        struct Blob {
+            var minX: Int, minY: Int, maxX: Int, maxY: Int
+            var count: Int
+            /// Pixels that are not part of a thin straight rule. See `mass`.
+            var mass: Int
+            /// Inked along at least three of its four edges, as a frame is. One
+            /// edge is allowed to be missing: a box that runs on to the next
+            /// page loses its bottom, and a very light rule can fall just short
+            /// of counting as ink on one side.
+            var closed = false
+
+            /// Made of nothing but thin straight rules: an empty frame, a row of
+            /// them, the rules of a table, an axis drawn on its own.
+            var hollow: Bool { InkMap.isRuled(count: count, mass: mass) }
+        }
+
+        struct Stats {
+            var rect: CGRect
+            var count: Int
+            /// The share of the rows, and of the columns, of the bounding box
+            /// that have ink in them.
+            var rows: Double
+            var columns: Double
+            var hollow: Bool
+            /// Ink of any kind across the middle of the bounding box.
+            var interiorInk: Int
+        }
+
+        let area: CGRect
+        let width: Int
+        let height: Int
+        let scale: CGFloat
+        /// Row-major, with row 0 along the bottom of `area`.
+        private let dark: [Bool]
+        /// Ink that is solid, filling the pixels all round it, or that runs
+        /// only a short way in both directions: a photograph, the bars of a
+        /// chart, a plotted line crossing at an angle, a dot, the shapes of a
+        /// map. The rest is rules: long thin runs, and the corners where they
+        /// meet.
+        private let mass: [Bool]
+        /// The blob each dark pixel belongs to.
+        private var owner: [Int32] = []
+        private(set) var blobs: [Blob] = []
+
+        init?(page: PDFPage, area: CGRect, masking: [CGRect]) {
+            // Bounded as well as finite. Nothing rejects an absurd media box — a
+            // page can declare itself 1e20 points tall and PDFKit reports it
+            // back verbatim — and every size below is derived from this one.
+            guard !area.isNull, area.width.isFinite, area.height.isFinite,
+                  area.width > 1, area.height > 1,
+                  area.width < 20_000, area.height < 20_000,
+                  let pageRef = page.pageRef else { return nil }
+
+            // The map is about three points to a pixel, which keeps grouping
+            // ink cheap. The page is drawn at three times that and each block
+            // of nine keeps its darkest pixel: drawn straight at the coarse
+            // size, a one-point grey rule averages out to almost white, and the
+            // frame of a picture vanishes.
+            let fold = 3
+            let scale = min(1.0 / 3.0, 700 / max(area.width, area.height))
+            let width = max(1, Int((area.width * scale).rounded(.up)))
+            let height = max(1, Int((area.height * scale).rounded(.up)))
+            let fineWidth = width * fold
+            let fineHeight = height * fold
+            guard let context = CGContext(data: nil, width: fineWidth, height: fineHeight,
+                                          bitsPerComponent: 8, bytesPerRow: fineWidth,
+                                          space: CGColorSpaceCreateDeviceGray(),
+                                          bitmapInfo: CGImageAlphaInfo.none.rawValue)
+            else { return nil }
+
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: fineWidth, height: fineHeight))
+            context.scaleBy(x: scale * CGFloat(fold), y: scale * CGFloat(fold))
+            context.translateBy(x: -area.minX, y: -area.minY)
+            // Drawn in page space, the space character bounds are measured in.
+            // `PDFPage.draw(with:to:)` turns the page by its /Rotate and moves
+            // the media box to the origin, so on a rotated page, or one whose
+            // media box does not start at zero, the ink it found was somewhere
+            // else entirely from the text it was being compared with.
+            context.saveGState()
+            context.drawPDFPage(pageRef)
+            context.restoreGState()
+
+            // Paint the text out, a little generously: glyph boxes do not always
+            // cover a glyph's whole extent, and a link's underline sits just
+            // below the line.
+            context.setFillColor(gray: 1, alpha: 1)
+            for rect in masking where rect.width.isFinite && rect.height.isFinite {
+                context.fill(rect.insetBy(dx: -1.5, dy: -max(1.5, rect.height * 0.3)))
+            }
+
+            guard let data = context.data else { return nil }
+            let pixels = data.bindMemory(to: UInt8.self, capacity: fineWidth * fineHeight)
+            var dark = [Bool](repeating: false, count: width * height)
+            for row in 0..<fineHeight {
+                // A bitmap context stores its first row at the top, while page
+                // coordinates count upward from the bottom.
+                let y = height - 1 - row / fold
+                let start = row * fineWidth
+                for x in 0..<fineWidth where pixels[start + x] < 235 {
+                    dark[y * width + x / fold] = true
+                }
+            }
+
+            self.area = area
+            self.width = width
+            self.height = height
+            self.scale = scale
+            self.dark = dark
+            self.mass = InkMap.mass(of: dark, width: width, height: height)
+            label(reach: max(1, Int((9 * scale).rounded())))
+        }
+
+        /// A group of blobs is no picture when it is all rules, give or take a
+        /// few corners and specks.
+        static func isRuled(count: Int, mass: Int) -> Bool {
+            mass <= max(6, count / 12)
+        }
+
+        private static func mass(of dark: [Bool], width: Int, height: Int) -> [Bool] {
+            // The length of the run of ink through each pixel, across and down.
+            var across = [Int32](repeating: 0, count: width * height)
+            var down = [Int32](repeating: 0, count: width * height)
+            for y in 0..<height {
+                var x = 0
+                while x < width {
+                    guard dark[y * width + x] else { x += 1; continue }
+                    var end = x
+                    while end + 1 < width && dark[y * width + end + 1] { end += 1 }
+                    for k in x...end { across[y * width + k] = Int32(end - x + 1) }
+                    x = end + 1
+                }
+            }
+            for x in 0..<width {
+                var y = 0
+                while y < height {
+                    guard dark[y * width + x] else { y += 1; continue }
+                    var end = y
+                    while end + 1 < height && dark[(end + 1) * width + x] { end += 1 }
+                    for k in y...end { down[k * width + x] = Int32(end - y + 1) }
+                    y = end + 1
+                }
+            }
+            var mass = [Bool](repeating: false, count: width * height)
+            for y in 0..<height {
+                for x in 0..<width where dark[y * width + x] {
+                    let i = y * width + x
+                    if across[i] <= 5 && down[i] <= 5 {
+                        mass[i] = true
+                        continue
+                    }
+                    guard x > 0, y > 0, x < width - 1, y < height - 1 else { continue }
+                    var solid = true
+                    for dy in -1...1 where solid {
+                        for dx in -1...1 where !dark[(y + dy) * width + x + dx] { solid = false }
+                    }
+                    mass[i] = solid
+                }
+            }
+            return mass
+        }
+
+        func rect(of blob: Blob) -> CGRect {
+            rect(blob.minX, blob.minY, blob.maxX, blob.maxY)
+        }
+
+        private func rect(_ minX: Int, _ minY: Int, _ maxX: Int, _ maxY: Int) -> CGRect {
+            CGRect(x: area.minX + CGFloat(minX) / scale,
+                   y: area.minY + CGFloat(minY) / scale,
+                   width: CGFloat(maxX - minX + 1) / scale,
+                   height: CGFloat(maxY - minY + 1) / scale)
+        }
+
+        /// Gathers the ink into blobs.
+        ///
+        /// Solid ink reaches across a gap of about nine points to other solid
+        /// ink, which keeps the bars of a chart together, and a photograph with
+        /// the strip of shadow beside it. A rule joins only what it touches.
+        /// Otherwise the frame around an infobox would gather up every picture
+        /// inside it, captions and all, into one.
+        private mutating func label(reach: Int) {
+            var owner = [Int32](repeating: -1, count: width * height)
+            var queue: [Int] = []
+            for start in dark.indices where dark[start] && owner[start] < 0 {
+                let id = Int32(blobs.count)
+                var blob = Blob(minX: width, minY: height, maxX: -1, maxY: -1, count: 0, mass: 0)
+                owner[start] = id
+                queue.removeAll(keepingCapacity: true)
+                queue.append(start)
+                var head = 0
+                while head < queue.count {
+                    let p = queue[head]
+                    head += 1
+                    let x = p % width
+                    let y = p / width
+                    blob.minX = min(blob.minX, x)
+                    blob.maxX = max(blob.maxX, x)
+                    blob.minY = min(blob.minY, y)
+                    blob.maxY = max(blob.maxY, y)
+                    blob.count += 1
+                    let solid = mass[p]
+                    if solid { blob.mass += 1 }
+                    let r = solid ? reach : 1
+                    for ny in max(0, y - r)...min(height - 1, y + r) {
+                        let rowStart = ny * width
+                        for nx in max(0, x - r)...min(width - 1, x + r) {
+                            let q = rowStart + nx
+                            guard dark[q], owner[q] < 0 else { continue }
+                            // Beyond touching distance, only solid to solid.
+                            if abs(nx - x) > 1 || abs(ny - y) > 1, !mass[q] { continue }
+                            owner[q] = id
+                            queue.append(q)
+                        }
+                    }
+                }
+                blobs.append(blob)
+            }
+            self.owner = owner
+
+            for b in blobs.indices {
+                let blob = blobs[b]
+                guard blob.maxX - blob.minX >= 4, blob.maxY - blob.minY >= 4 else { continue }
+                let id = Int32(b)
+                func own(_ x: Int, _ y: Int) -> Bool { owner[y * width + x] == id }
+                // Each edge, give or take a pixel, inked along at least half its
+                // length.
+                func edge(_ points: [(Int, Int)], _ step: (Int, Int)) -> Bool {
+                    let hits = points.filter { own($0.0, $0.1) || own($0.0 + step.0, $0.1 + step.1) }
+                    return hits.count * 2 >= points.count
+                }
+                let xs = Array(blob.minX...blob.maxX)
+                let ys = Array(blob.minY...blob.maxY)
+                let edges = [edge(xs.map { ($0, blob.minY) }, (0, 1)),
+                             edge(xs.map { ($0, blob.maxY) }, (0, -1)),
+                             edge(ys.map { (blob.minX, $0) }, (1, 0)),
+                             edge(ys.map { (blob.maxX, $0) }, (-1, 0))]
+                blobs[b].closed = edges.filter { $0 }.count >= 3
+            }
+        }
+
+        func stats(of members: [Int]) -> Stats {
+            var minX = width, minY = height, maxX = -1, maxY = -1
+            var count = 0
+            var solid = 0
+            var isMember = [Bool](repeating: false, count: blobs.count)
+            for b in members {
+                let blob = blobs[b]
+                minX = min(minX, blob.minX)
+                minY = min(minY, blob.minY)
+                maxX = max(maxX, blob.maxX)
+                maxY = max(maxY, blob.maxY)
+                count += blob.count
+                solid += blob.mass
+                isMember[b] = true
+            }
+            guard maxX >= minX, maxY >= minY else {
+                return Stats(rect: .null, count: 0, rows: 0, columns: 0, hollow: true, interiorInk: 0)
+            }
+
+            var rowHit = [Bool](repeating: false, count: maxY - minY + 1)
+            var columnHit = [Bool](repeating: false, count: maxX - minX + 1)
+            for y in minY...maxY {
+                for x in minX...maxX {
+                    let o = owner[y * width + x]
+                    if o >= 0 && isMember[Int(o)] {
+                        rowHit[y - minY] = true
+                        columnHit[x - minX] = true
+                    }
+                }
+            }
+            // The middle three fifths of the box, each way.
+            var interiorInk = 0
+            let dx = (maxX - minX + 1) / 5
+            let dy = (maxY - minY + 1) / 5
+            if dx > 0, dy > 0 {
+                for y in (minY + dy)...(maxY - dy) {
+                    for x in (minX + dx)...(maxX - dx) where dark[y * width + x] { interiorInk += 1 }
+                }
+            }
+            return Stats(rect: rect(minX, minY, maxX, maxY),
+                         count: count,
+                         rows: Double(rowHit.filter { $0 }.count) / Double(rowHit.count),
+                         columns: Double(columnHit.filter { $0 }.count) / Double(columnHit.count),
+                         hollow: InkMap.isRuled(count: count, mass: solid),
+                         interiorInk: interiorInk)
+        }
     }
 
     private static func startsNewParagraph(previous: Line,
