@@ -1,0 +1,14 @@
+{
+ "format": 1,
+ "version": 1,
+ "published": "2026-10-31",
+ "changes": [],
+ "files": {
+  "fish-rules.json": {
+   "sha256": "b2d0456bedcd69339896c0aed1cffc4f6910fb5073682a86a4740890afc33293"
+  },
+  "land-rules.json": {
+   "sha256": "f299bc7678c2160dd2a4aa9473cf4661e0d76455af2be8eb956f8b4087df05b5"
+  }
+ }
+}
