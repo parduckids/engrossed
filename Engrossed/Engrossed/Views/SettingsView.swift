@@ -200,6 +200,10 @@ struct SettingsForm: View {
                     .buttonStyle(SoftButtonStyle(theme: theme))
                     caption("Your books and your places are kept. Only the extracted text is dropped, and it’s rebuilt the next time you open a book.")
                 }
+
+                group("Independently made") {
+                    caption("Engrossed is designed and built by an independent developer. It began as a tool made for personal use and proved useful enough to share. There is no subscription and no account, and reading works without an internet connection.")
+                }
             }
         .padding(isCompact ? 20 : 30)
         .frame(maxWidth: 620, alignment: .leading)
